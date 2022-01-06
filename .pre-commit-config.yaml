@@ -10,15 +10,15 @@ repos:
     rev: v1.4
     hooks:
       - id: docformatter
-        args: [--in-place, --wrap-summaries, '72', --pre-summary-newline]
-        files: 'src'
+        args: [--in-place, --wrap-descriptions, '88', --wrap-summaries, '88', --pre-summary-newline]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.0.1
+    rev: v4.1.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
-  - repo: https://github.com/pre-commit/mirrors-yapf
-    rev: v0.31.0
+  - repo: https://github.com/psf/black
+    rev: 21.12b0
     hooks:
-      - id: yapf
-        additional_dependencies: [toml]
+      - id: black
+default_language_version:
+  python: python3.9

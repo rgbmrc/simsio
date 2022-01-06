@@ -5,6 +5,6 @@
 		}
 	],
 	"settings": {
-		"python.formatting.provider": "yapf"
+		"python.formatting.provider": "black"
 	}
 }

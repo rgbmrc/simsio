@@ -1,0 +1,503 @@
+"""
+**Abbreviations**
+ - sim: simulation
+ - uid: simulation identifier (human provided key or computer generated uuid)
+
+**Storage elements** associated with a Simulation instance
+
+ name | fullname | I/O | typ | description
+ ---------------------------------------------------------------------
+ log  | log      |   O | txt | cronological summary of the simulation
+ res  | results  |   O | bin | measurements to be tabulated or plotted
+ par  | params   | I/O | txt | options used by routines and classes
+ dat  | data     | I/O | bin | any persistent object, all the above included
+ cfg  | config   | I   | txt | subset of par provided as user input
+"""
+
+import fcntl
+import logging
+import logging.config
+import re
+import shlex
+import time
+import uuid
+from collections import defaultdict, deque
+from contextlib import contextmanager
+from functools import cached_property, wraps
+from itertools import chain, product
+from pathlib import Path
+from shutil import rmtree
+from string import Template
+from subprocess import run
+
+import dictdiffer
+import dpath.util as dpath
+import numpy as np
+import ruamel.yaml as yaml
+
+from simsio import rc
+from simsio.iocore import Cache
+
+logger = logging.getLogger(__name__)
+
+yamlrt = yaml.YAML(typ="rt")
+yamlsf = yaml.YAML(typ="safe")
+
+
+def _valid_uuid(uid=None, raise_invalid=False):
+    """
+    Returns and/or check the validity of a UUID (universally unique identifier).
+
+    Parameters
+    ----------
+    uid : str, optional
+        Input UUID, by default None
+    raise_invalid : bool, optional
+        Whether ValueError should be raised when uid is not a valid UUID, by default False
+
+    Returns
+    -------
+    str
+        A valid UUID string, with no dashes (-).
+        Either generate one, or uid if uid is a valid UUID.
+
+    Raises
+    ------
+    ValueError
+        If raise_invalid and uid is not a valid UUID.
+    """
+    try:
+        uid = uuid.UUID(uid, version=1)
+    except (ValueError, TypeError) as e:
+        if raise_invalid:
+            raise ValueError from e
+        else:
+            uid = uuid.uuid1()
+    return str(uid).replace("-", "")
+
+
+UID_DTYPE = np.array(_valid_uuid()).dtype
+
+CFG_EXT = ".yaml"
+CFG_DIR = Path(rc["configs"]["directory"])
+CFG_LOCK_ATTEMPT_FREQ = 3
+
+cache = {}
+
+# TODO: use file cache for _config_path_history
+HISTORY_FILE = ".simsio_history"
+_config_path_history = deque(maxlen=100)
+
+
+def sim_or_uid_arg(fun_sim):
+    @wraps(fun_sim)
+    def fun_sim_or_uid(uid, *args, **kwargs):
+        return fun_sim(get_sim(uid), *args, **kwargs)
+
+    return fun_sim_or_uid
+
+
+@sim_or_uid_arg
+def extract_text(sim, key, regex, reverse=False, op="search"):
+    d = sim[key]
+    if reverse:
+        d = "\n".join(reversed(d.splitlines()))
+    return getattr(regex, op)(d)
+
+
+@sim_or_uid_arg
+def extract_dict(sim, key, glob, op="get"):
+    return getattr(dpath, op)(sim[key], glob)
+
+
+def glob_groups(pattern=None, cron=False):
+    """
+    Returns the paths of config files matching a glob.
+
+    Parameters
+    ----------
+    group : str, optional
+        Glob pattern to match (extension excluded), by default '*
+    configs_dir : str, optional
+        Directory where to look for config files, by default CONFIGS_DIR
+    configs_ext : str, optional
+        Extension of config files, by default CONFIGS_EXT
+
+    Returns
+    -------
+    list[Path]
+        Paths of matching config files, ordered chronologically, from the most recently used process
+    """
+    pattern = (pattern or "**/*") + CFG_EXT
+    paths = CFG_DIR.glob(pattern)
+    if cron:
+        paths = set(paths)
+        paths = chain(
+            (p for p in _config_path_history if p in paths),
+            (p for p in paths if not p in _config_path_history),
+        )
+    return paths
+
+
+def get_uids(glob=None):
+    """
+    DEPRECATED, use sims_query.
+
+    Returns uids contained in config files matching a glob.
+
+    Parameters
+    ----------
+    group : str, optional
+        Glob pattern the config filename should match, by default '*'
+
+    Returns
+    -------
+    set[str]
+        uids in matching configs.
+    """
+    root = (set(yamlsf.load(p)) for p in glob_groups(glob))
+    return set.union(*root) - {rc["configs"]["header_tag"]}
+
+
+def path_to_group(p):
+    return str(p.relative_to(CFG_DIR).with_suffix(""))
+
+
+def group_to_path(g):
+    return Path(CFG_DIR, g).with_suffix(CFG_EXT)
+
+
+class SimsQuery:
+    def __init__(self, group_glob=None, uid_regex=None):
+        self.group_glob = group_glob
+        self.uid_regex = uid_regex
+
+        tag = rc["configs"]["header_tag"]
+        if not uid_regex:
+            uid_filter = lambda u: u != tag
+        else:
+            uid_regex = re.compile(uid_regex, re.S)
+            uid_filter = lambda u: u != tag and uid_regex.fullmatch(u)
+
+        self.groups = {
+            path_to_group(p): {u for u in yamlsf.load(p) if uid_filter(u)}
+            for p in glob_groups(group_glob)
+        }  # yapf: disable
+
+    @cached_property
+    def uids(self):
+        return {u: g for g, us in self.groups.items() for u in us}
+
+    def __repr__(self):
+        cls = self.__class__.__name__
+        args = f"group_glob={self.group_glob!r}, uid_regex={self.uid_regex!r}"
+        return f"{cls}({args})"
+
+
+def gen_configs(template, params, glob=None):
+    generated = {}
+    for path in glob_groups(glob):
+        configs = yamlrt.load(path)
+        header = configs[rc["configs"]["header_tag"]]
+        template = Template(header[template])
+        uids = generated[path.stem] = set()
+        for enum, vals in enumerate(product(*params.values())):
+            yml = template.substitute(
+                dict(zip(params.keys(), vals)),
+                enum=str(enum),
+            )
+            c = yamlrt.load(yml)
+            configs |= c
+            uids |= set(c)
+        yamlrt.dump(configs, path)
+    return generated
+
+
+def get_sim(sim_or_uid):
+    """
+    Retreives a simulation from the cache, building it if not already present.
+
+    The eventual Simulation initialization uses default arguments.
+    """
+    if isinstance(sim_or_uid, Simulation):
+        return sim_or_uid
+    if sim_or_uid not in cache:
+        cache[sim_or_uid] = Simulation(sim_or_uid)
+        logger.debug(f"Cached simulation {sim_or_uid}")
+    return cache[sim_or_uid]
+
+
+def _get_params_vals(uids, keys):
+    pars = (get_sim(uid)["par"] for uid in uids)
+    for i, k in enumerate(keys):
+        if isinstance(k, str):
+            keys[i] = (k, dpath._DEFAULT_SENTINAL)
+    vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
+    return list(zip(*vals))
+
+
+def uids_sort(uids, keys):
+    """
+    Sorts a set of uids in lexicographic order according to the values of the given
+    parmeters.
+
+    Parameters
+    ----------
+    uids : [type]
+        [description]
+    keys : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    vals = _get_params_vals(uids, keys)
+    idxs = np.lexsort(reversed(vals))
+    return [uids[i] for i in idxs]
+
+
+def uids_grid(uids, keys):
+    # TODO: aliases for paths
+    vals = _get_params_vals(uids, keys)
+    idxs = np.empty((len(keys), len(uids)), dtype=np.intp)
+    uniq = {}
+    for j, ((k, d), v) in enumerate(zip(keys, vals)):
+        u, i = np.unique(v, return_inverse=True)
+        uniq[k] = u
+        idxs[j] = i
+    idxs = idxs.T
+    grid = np.empty([len(u) for u in uniq.values()], dtype=UID_DTYPE)
+    for i, uid in zip(idxs, uids):
+        grid[tuple(i)] = uid
+
+    return grid, uniq
+
+
+def pop(*uids, group=None):
+    cfgs_paths = defaultdict(set)
+    for u in uids:
+        p, _ = load_config(u, group, expand=False)
+        cfgs_paths[p].add(u)
+    for p, us in cfgs_paths.items():
+        with lock_config(p) as cfg:
+            for u in us:
+                for h in rc["IO-handlers"].values():
+                    glob = h.split(",")[0].strip()
+                    glob = Template(glob).substitute(uid=u, key="*")
+                    for p in Path(dir).glob(u):  # TODO: make recursive?
+                        if p.is_file():
+                            p.unlink()
+                        elif p.is_dir():
+                            rmtree(p)
+                cfg.pop(u)
+                logger.info(f"Deleted {u}")
+
+
+def _merge(dst, src):
+    if isinstance(dst, dict) and isinstance(src, dict):
+        for k in src:
+            if k not in dst:
+                dst[k] = src[k]
+            else:
+                _merge(dst[k], src[k])
+
+
+def _expand(config, templates):
+    if isinstance(config, dict):
+        refs = config.pop(rc["configs"]["header_ref"], [])
+        if isinstance(refs, str):
+            refs = [refs]
+        for k in config:
+            _expand(config[k], templates)
+        for r in reversed(refs):
+            _merge(config, templates[r])
+    elif isinstance(config, list):
+        for v in config:
+            _expand(v, templates)
+
+
+def load_config(uid, group=None, expand=True):
+    for path in glob_groups(group):
+        cfgs = yamlsf.load(path)
+        if cfg := cfgs.get(uid):
+            logger.info(f"Config for {uid} found in {path}")
+            while path in _config_path_history:
+                _config_path_history.remove(path)
+            _config_path_history.appendleft(path)
+            break
+    else:
+        raise ValueError(f"Simulation {uid} config not found")
+
+    if expand:  # expand config via templates
+        _expand(cfg, cfgs.get(rc["configs"]["header_tag"], {}))
+
+    return path, cfg
+
+
+@contextmanager
+def lock_config(path):
+    with open(path, "r+") as f:
+        for _ in range(rc["configs"].getint("lock_attempts")):
+            try:
+                logger.debug(f"Attempting to acquire lock on {path}")
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as e:
+                error = e
+                time.sleep(1.0 / CFG_LOCK_ATTEMPT_FREQ)
+                continue
+            else:
+                cfgs = yamlrt.load(f)
+                yield cfgs
+                f.seek(0)
+                yamlrt.dump(cfgs, f)
+                break
+        else:
+            raise error
+
+
+class Simulation(Cache):
+    def __init__(self, uid, group=None, readonly=True):
+        _uid, uid = uid, uid if readonly else _valid_uuid(uid)
+        self.uid = uid
+        self._save_time = None
+        self._cpu_clock = time.process_time()
+
+        # init Cache & link rc I/O
+        super().__init__(readonly=readonly)
+        for key in rc["IO-handlers"]:
+            if key != "dat":
+                self.link(key)
+
+        # setup logging
+        self.setup_logging()
+
+        try:
+            self.load("par")
+        except FileNotFoundError:
+            self["par"] = {}
+
+        # config & runtime info
+        # when readonly, proceed only if not self['par'] TODO: ok?
+        if not readonly or not self["par"]:
+
+            # retieve config
+            path, cfg = load_config(_uid, group)
+
+            # update uid in config
+            if uid != _uid:
+                with lock_config(path) as cfgs:
+                    cfgs.insert(list(cfgs).index(_uid), uid, cfgs.pop(_uid))
+                logger.info(f"Assigned uid {uid}")
+
+            # retieve runtime info
+            info = self.runtime_info(init=True)
+
+            # update params
+            diff = dictdiffer.diff(self["par"], cfg | info, expand=True)
+            diff = [d for d in diff if not "remove" in d]
+            if diff:
+                dictdiffer.patch(diff, self["par"], in_place=True)
+                if readonly:
+                    msg = f"No {uid} params found, loading config"
+                else:
+                    msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
+                    msg = "\n".join(("Config changes", msg, "=" * 80))
+                logger.warning(msg)
+
+        # self['par'].touch('version', 'monitor')
+
+    def __repr__(self):
+        cls = self.__class__.__name__
+        args = f"{self.uid!r}, readonly={self.readonly!r}"
+        return f"{cls}({args}){set(self)}"
+
+    def __getattribute__(self, name):
+        if name in rc["IO-handlers"]:
+            return self[name]
+        else:
+            return super().__getattribute__(name)
+
+    def runtime_info(self, init=False):
+        """Integrate simulation params with runtime info."""
+        info = {"uid": self.uid}
+        if self.readonly:
+            return info
+
+        if init:
+            # versioning information (only at launch)
+            info["versioning"] = {
+                tag: run(
+                    shlex.split(cmd),
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                for tag, cmd in rc["versioning"].items()
+            }
+
+        # cpu time
+        cpu_time_path = "monitoring/cpu_time"
+        delta = time.process_time() - self._cpu_clock
+        self._cpu_clock += delta
+        cpu_time = dpath.get(self["par"], cpu_time_path, default=0.0)
+        dpath.new(info, cpu_time_path, cpu_time + delta)
+
+        return info
+
+    def setup_logging(self):
+        """Setup logging."""
+
+        levels = rc["logging-levels"]
+        format = rc["logging-format"]
+        handlers = {}
+        handlers["console"] = {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        }
+        if not self.readonly:
+            handlers["file"] = {
+                "class": "logging.FileHandler",
+                "filename": self.handles["log"].storage,
+                # TODO: public access to storage
+            }
+        for h in handlers.values():
+            h["formatter"] = "fmt"
+        loggingrc = {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {"fmt": dict(format)},
+            "handlers": handlers,
+            "loggers": {k: {"level": l} for k, l in levels.items()},
+            "root": {"handlers": list(handlers)},
+        }  # yapf: disable
+        logging.config.dictConfig(loggingrc)
+        logging.captureWarnings(True)
+
+    def link(self, key, **link_kw):
+        # TODO:
+        # if key in rc['IO-handlers']:
+        #     raise ValueError(f'IO key {key} is reserved')
+
+        handlers = rc["IO-handlers"]
+        h = handlers.get(key) or handlers["dat"]
+        h = Template(h).substitute(uid=self.uid, key=key)
+        rc_link_kw = dict(
+            zip(
+                ("path", "write_mode", "serializer"),
+                (s.strip() for s in h.split(",")),
+            ),
+        )
+        # TODO: assert path is subpath of a rc directory
+        # https://stackoverflow.com/questions/3812849/how-to-check-whether-a-directory-is-a-sub-directory-of-another-directory
+        return super().link(key, **(rc_link_kw | link_kw))
+
+    def dump(self, wait=0, **keyvals):
+        if self._save_time and (time.monotonic() - self._save_time < wait):
+            return False
+        else:
+            # tenpy Config does not support |=, use update
+            self["par"].update(self.runtime_info())
+            super().dump(**(self.writable | keyvals))
+            self._save_time = time.monotonic()
+            return True
