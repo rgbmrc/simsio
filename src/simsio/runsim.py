@@ -73,8 +73,6 @@ def run_sim(**sim_kwargs):
         logger.exception("Uncaught exception while running simulation")
         raise
     finally:
-        t = time.process_time()
-        logger.info("starting dump")
         sim.dump()
-        logger.info(f"finished dump after: {time.process_time() - t:.0f}s")
         sim["par"].warn_unused(recursive=True)
+        sim.close()

@@ -78,6 +78,7 @@ def _valid_uuid(uid=None, raise_invalid=False):
 
 
 UID_DTYPE = np.array(_valid_uuid()).dtype
+UID_REGEX = "[a-z0-9]{32}"
 
 CFG_EXT = ".yaml"
 CFG_DIR = Path(rc["configs"]["directory"])
@@ -169,7 +170,7 @@ def group_to_path(g):
 
 
 class SimsQuery:
-    def __init__(self, group_glob=None, uid_regex=None):
+    def __init__(self, group_glob=None, uid_regex=UID_REGEX):
         self.group_glob = group_glob
         self.uid_regex = uid_regex
 
@@ -323,13 +324,12 @@ def load_config(uid, group=None, expand=True):
     for path in glob_groups(group):
         cfgs = yamlsf.load(path)
         if cfg := cfgs.get(uid):
-            logger.info(f"Config for {uid} found in {path}")
             while path in _config_path_history:
                 _config_path_history.remove(path)
             _config_path_history.appendleft(path)
             break
     else:
-        raise ValueError(f"Simulation {uid} config not found")
+        raise KeyError(f"Simulation {uid} config not found")
 
     if expand:  # expand config via templates
         _expand(cfg, cfgs.get(rc["configs"]["header_tag"], {}))
@@ -360,55 +360,66 @@ def lock_config(path):
 
 class Simulation(Cache):
     def __init__(self, uid, group=None, readonly=True):
-        _uid, uid = uid, uid if readonly else _valid_uuid(uid)
-        self.uid = uid
-        self._save_time = None
-        self._cpu_clock = time.process_time()
-
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
+
+        self.uid = uid if readonly else _valid_uuid(uid)
+        self._save_time = None
+        self._cpu_clock = time.process_time()
+        self.cfg_path = None
+        cfg = {}
+
+        # before writing/linking anything get config
+        if not readonly:
+            self.cfg_path, cfg = load_config(uid, group)
+            # update uid in config
+            with lock_config(self.cfg_path) as cfgs:
+                cfgs.insert(list(cfgs).index(uid), f"{self.uid}-R", cfgs.pop(uid))
+
         for key in rc["IO-handlers"]:
             if key != "dat":
                 self.link(key)
 
         # setup logging
         self.setup_logging()
-        logger.info("Running", *sys.argv)
+        if not readonly:
+            logger.info(
+                f"Running {shlex.join(sys.argv)}, config found in {self.cfg_path}"
+            )
 
-        try:
-            self.load("par")
-        except FileNotFoundError:
-            self["par"] = {}
+        # handle readonly uninitiazlized simulation
+        if readonly and not self.load("par"):
+            _, self["par"] = load_config(uid, group)
 
-        # config & runtime info
-        # when readonly, proceed only if not self['par'] TODO: ok?
-        if not readonly or not self["par"]:
-
-            # retieve config
-            path, cfg = load_config(_uid, group)
-
-            # update uid in config
-            if uid != _uid:
-                with lock_config(path) as cfgs:
-                    cfgs.insert(list(cfgs).index(_uid), uid, cfgs.pop(_uid))
-                logger.info(f"Assigned uid {uid}")
-
-            # retieve runtime info
-            info = self.runtime_info(init=True)
+        # merge config & runtime info into params
+        if not readonly:
+            cfg["uuid"] = self.uid
+            cfg["versioning"] = {
+                tag: run(
+                    shlex.split(cmd),
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                for tag, cmd in rc["versioning"].items()
+            }
 
             # update params
-            diff = dictdiffer.diff(self["par"], cfg | info, expand=True)
+            diff = dictdiffer.diff(self["par"], cfg, expand=True)
             diff = [d for d in diff if not "remove" in d]
             if diff:
                 dictdiffer.patch(diff, self["par"], in_place=True)
-                if readonly:
-                    msg = f"No {uid} params found, loading config"
-                else:
-                    msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
-                    msg = "\n".join(("Config changes", msg, "=" * 80))
+                msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
+                msg = "\n".join(("Config changes", msg, "=" * 80))
                 logger.warning(msg)
 
         # self['par'].touch('version', 'monitor')
+
+    def close(self):
+        if not self.readonly and self.cfg_path:
+            uid_R = f"{self.uid}-R"
+            # update uid in config
+            with lock_config(self.cfg_path) as cfgs:
+                cfgs.insert(list(cfgs).index(uid_R), self.uid, cfgs.pop(uid_R))
 
     def __repr__(self):
         cls = self.__class__.__name__
@@ -421,22 +432,9 @@ class Simulation(Cache):
         else:
             return super().__getattribute__(name)
 
-    def runtime_info(self, init=False):
-        """Integrate simulation params with runtime info."""
-        info = {"uid": self.uid}
-        if self.readonly:
-            return info
-
-        if init:
-            # versioning information (only at launch)
-            info["versioning"] = {
-                tag: run(
-                    shlex.split(cmd),
-                    capture_output=True,
-                    text=True,
-                ).stdout.strip()
-                for tag, cmd in rc["versioning"].items()
-            }
+    def runtime_info(self):
+        """Integrates simulation params with runtime info and returns it."""
+        info = {}
 
         # cpu time
         cpu_time_path = "monitoring/cpu_time"
@@ -445,6 +443,7 @@ class Simulation(Cache):
         cpu_time = dpath.get(self["par"], cpu_time_path, default=0.0)
         dpath.new(info, cpu_time_path, cpu_time + delta)
 
+        self["par"] |= info
         return info
 
     def setup_logging(self):
@@ -498,8 +497,9 @@ class Simulation(Cache):
         if self._save_time and (time.monotonic() - self._save_time < wait):
             return False
         else:
-            # tenpy Config does not support |=, use update
-            self["par"].update(self.runtime_info())
+            start_dump_time = time.process_time()
+            self.runtime_info()
             super().dump(**(self.writable | keyvals))
             self._save_time = time.monotonic()
+            logger.info(f"Dumped, took {time.process_time() - start_dump_time:.1f}s")
             return True
