@@ -19,6 +19,7 @@ import logging
 import logging.config
 import re
 import shlex
+import sys
 import time
 import uuid
 from collections import defaultdict, deque
@@ -372,6 +373,7 @@ class Simulation(Cache):
 
         # setup logging
         self.setup_logging()
+        logger.info("Running", *sys.argv)
 
         try:
             self.load("par")
