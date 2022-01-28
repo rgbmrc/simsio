@@ -321,6 +321,8 @@ def _expand(config, templates):
 
 
 def load_config(uid, group=None, expand=True):
+    if uid in (rc["configs"]["header_tag"], rc["configs"]["header_ref"]):
+        raise KeyError(f"Key {uid} is reserved")
     for path in glob_groups(group):
         cfgs = yamlsf.load(path)
         if cfg := cfgs.get(uid):
