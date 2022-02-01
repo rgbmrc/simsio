@@ -390,8 +390,13 @@ class Simulation(Cache):
             )
 
         # handle readonly uninitiazlized simulation
-        if readonly and not self.load("par"):
-            _, self["par"] = load_config(uid, group)
+        try:
+            self.load("par")
+        except FileNotFoundError:
+            if readonly:
+                _, self["par"] = load_config(uid, group)
+            else:
+                raise
 
         # merge config & runtime info into params
         if not readonly:
