@@ -41,8 +41,9 @@ from simsio.iocore import Cache
 
 logger = logging.getLogger(__name__)
 
-yamlrt = yaml.YAML(typ="rt")
 yamlsf = yaml.YAML(typ="safe")
+yamlrt = yaml.YAML(typ="rt")
+yamlrt.width = 8192
 
 
 def _valid_uuid(uid=None, raise_invalid=False):
