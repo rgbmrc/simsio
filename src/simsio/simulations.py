@@ -204,11 +204,15 @@ def gen_configs(template, params, glob=None):
         header = configs[rc["configs"]["header_tag"]]
         template = Template(header[template])
         uids = generated[path.stem] = set()
-        for enum, vals in enumerate(product(*params.values())):
-            yml = template.substitute(
-                dict(zip(params.keys(), vals)),
-                enum=str(enum),
-            )
+        try:
+            keys = params.keys()
+            vals = params.vals()
+        except AttributeError:
+            pass
+        else:
+            params = [dict(zip(keys, vs)) for vs in vals]
+        for enum, ps in enumerate(params):
+            yml = template.substitute(**ps, enum=str(enum))
             c = yamlrt.load(yml)
             configs |= c
             uids |= set(c)
