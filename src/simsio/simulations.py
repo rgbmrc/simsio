@@ -240,7 +240,7 @@ def _get_params_vals(uids, keys):
         if isinstance(k, str):
             keys[i] = (k, dpath._DEFAULT_SENTINAL)
     vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
-    return list(zip(*vals))
+    return tuple(zip(*vals))
 
 
 def uids_sort(uids, keys):
@@ -261,7 +261,7 @@ def uids_sort(uids, keys):
         [description]
     """
     vals = _get_params_vals(uids, keys)
-    idxs = np.lexsort(reversed(vals))
+    idxs = np.lexsort(vals[::-1])
     return [uids[i] for i in idxs]
 
 
