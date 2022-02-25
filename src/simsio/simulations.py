@@ -226,6 +226,8 @@ def get_sim(sim_or_uid):
 
     The eventual Simulation initialization uses default arguments.
     """
+    if not sim_or_uid:
+        return None
     if isinstance(sim_or_uid, Simulation):
         return sim_or_uid
     if sim_or_uid not in cache:
@@ -276,9 +278,9 @@ def uids_grid(uids, keys):
         idxs[j] = i
     idxs = idxs.T
     grid = np.empty([len(u) for u in uniq.values()], dtype=UID_DTYPE)
+    # grid = np.ma.masked_all([len(u) for u in uniq.values()], dtype=UID_DTYPE, fill_value='')
     for i, uid in zip(idxs, uids):
         grid[tuple(i)] = uid
-
     return grid, uniq
 
 
