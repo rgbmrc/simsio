@@ -74,5 +74,6 @@ def run_sim(**sim_kwargs):
         raise
     finally:
         sim.dump()
-        sim["par"].warn_unused(recursive=True)
+        if hasattr(sim["par"], "warn_unused"):
+            sim["par"].warn_unused(recursive=True)
         sim.close()
