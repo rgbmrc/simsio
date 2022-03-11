@@ -206,13 +206,13 @@ def gen_configs(template, params, glob=None):
         uids = generated[path.stem] = set()
         try:
             keys = params.keys()
-            vals = params.vals()
+            vals = params.values()
         except AttributeError:
             pass
         else:
-            params = [dict(zip(keys, vs)) for vs in vals]
+            params = [dict(zip(keys, vs)) for vs in product(*vals)]
         for enum, ps in enumerate(params):
-            yml = template.substitute(**ps, enum=str(enum))
+            yml = template.substitute(ps, enum=str(enum))
             c = yamlrt.load(yml)
             configs |= c
             uids |= set(c)
