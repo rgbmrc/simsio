@@ -60,7 +60,6 @@ class HickleSerializer(metaclass=SerializerMeta):
 class NPYSerializer(metaclass=SerializerMeta):
     typ = "b"
     ext = ".npy"
-    load = np.load
 
     @staticmethod
     def load(f):
