@@ -239,9 +239,9 @@ def get_sim(sim_or_uid):
 def _get_params_vals(uids, keys):
     pars = (get_sim(uid)["par"] for uid in uids)
     for i, k in enumerate(keys):
-        if isinstance(k, str):
+        if isinstance(k, str) or  callable(k): # TODO: hack
             keys[i] = (k, dpath._DEFAULT_SENTINAL)
-    vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
+    vals = [[k(p) if callable(k) else dpath.get(p, k, default=d) for k, d in keys] for p in pars]
     return tuple(zip(*vals))
 
 
