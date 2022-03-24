@@ -262,6 +262,7 @@ def uids_sort(uids, keys):
     [type]
         [description]
     """
+    uids = list(uids)
     vals = _get_params_vals(uids, keys)
     idxs = np.lexsort(vals[::-1])
     return [uids[i] for i in idxs]
