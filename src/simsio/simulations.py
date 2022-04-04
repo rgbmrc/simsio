@@ -362,6 +362,7 @@ def lock_config(path):
                 cfgs = yamlrt.load(f)
                 yield cfgs
                 f.seek(0)
+                f.truncate()
                 yamlrt.dump(cfgs, f)
                 break
         else:
