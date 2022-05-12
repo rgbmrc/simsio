@@ -392,8 +392,8 @@ class Simulation(Cache):
                 self.link(key)
 
         # setup logging
-        self.setup_logging()
         if not readonly:
+            self.setup_logging()
             logger.info(
                 f"Running {shlex.join(sys.argv)}, config found in {self.cfg_path}"
             )
@@ -472,12 +472,11 @@ class Simulation(Cache):
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
         }
-        if not self.readonly:
-            handlers["file"] = {
-                "class": "logging.FileHandler",
-                "filename": self.handles["log"].storage,
-                # TODO: public access to storage
-            }
+        handlers["file"] = {
+            "class": "logging.FileHandler",
+            "filename": self.handles["log"].storage,
+            # TODO: public access to storage
+        }
         for h in handlers.values():
             h["formatter"] = "fmt"
         loggingrc = {
