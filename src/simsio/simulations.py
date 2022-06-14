@@ -105,7 +105,7 @@ def extract_text(sim, key, regex, reverse=False, op="search"):
     d = sim[key]
     if reverse:
         d = "\n".join(reversed(d.splitlines()))
-    return getattr(regex, op)(d)
+    return getattr(re.compile(regex), op)(d)
 
 
 @sim_or_uid_arg
