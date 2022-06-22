@@ -94,8 +94,8 @@ _config_path_history = deque(maxlen=100)
 
 def sim_or_uid_arg(fun_sim):
     @wraps(fun_sim)
-    def fun_sim_or_uid(uid, *args, **kwargs):
-        return fun_sim(get_sim(uid), *args, **kwargs)
+    def fun_sim_or_uid(sim, *args, **kwargs):
+        return fun_sim(get_sim(sim), *args, **kwargs)
 
     return fun_sim_or_uid
 
