@@ -285,6 +285,17 @@ def uids_grid(uids, keys):
     return grid, uniq
 
 
+def sort_config(glob, keys):
+    tag = rc["configs"]["header_tag"]
+    for path in glob_groups(glob):
+        with lock_config(path) as cfg:
+            header = cfg.pop(tag, None)
+            for u in reversed(uids_sort(cfg, keys)):
+                cfg.insert(0, u, cfg.pop(u))
+            if header:
+                cfg.insert(0, tag, header)
+
+
 def pop(*uids, group=None):
     cfgs_paths = defaultdict(set)
     for u in uids:
