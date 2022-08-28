@@ -109,8 +109,9 @@ def extract_text(sim, key, regex, reverse=False, op="search"):
 
 
 @sim_or_uid_arg
-def extract_dict(sim, key, glob, op="get"):
-    return getattr(dpath, op)(sim[key], glob)
+def extract_dict(sim, key, glob, op=None):
+    op = op or dpath.get
+    return op(sim[key], glob)
 
 
 def glob_groups(pattern=None, cron=False):
