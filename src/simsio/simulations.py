@@ -386,7 +386,7 @@ class Simulation(Cache):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
 
-        self.uid = uid if readonly else _valid_uuid(uid)
+        self.uid = uid.rsplit("-", 1)[0] if readonly else _valid_uuid(uid)
         self._save_time = None
         self._cpu_clock = time.process_time()
         self.cfg_path = None
@@ -412,12 +412,13 @@ class Simulation(Cache):
 
         # handle readonly uninitiazlized simulation
         try:
-            self.load("par")
+            par = self.load("par")
         except FileNotFoundError:
-            if readonly:
-                _, self["par"] = load_config(uid, group)
-            else:
+            par = None
+            if not readonly:
                 raise
+        if readonly and not par:
+            _, self["par"] = load_config(uid, group)
 
         # merge config & runtime info into params
         if not readonly:
