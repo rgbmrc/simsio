@@ -246,7 +246,7 @@ def _get_params_vals(uids, keys):
     return tuple(zip(*vals))
 
 
-def uids_sort(uids, keys):
+def uids_sort(uids, keys, return_vals=False):
     """
     Sorts a set of uids in lexicographic order according to the values of the given
     parmeters.
@@ -266,7 +266,12 @@ def uids_sort(uids, keys):
     uids = list(uids)
     vals = _get_params_vals(uids, keys)
     idxs = np.lexsort(vals[::-1])
-    return [uids[i] for i in idxs]
+    uids = [uids[i] for i in idxs]
+    if return_vals:
+        vals = tuple(zip(*vals))
+        vals = [vals[i] for i in idxs]
+        return uids, vals
+    return uids
 
 
 def uids_grid(uids, keys):
