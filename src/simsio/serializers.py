@@ -16,7 +16,6 @@
 import json
 import pickle
 
-import hickle
 import ruamel.yaml as ryaml
 import numpy as np
 
@@ -46,15 +45,6 @@ class PickleSerializer(metaclass=SerializerMeta):
     ext = ".pkl"
     load = staticmethod(pickle.load)
     dump = staticmethod(pickle.dump)
-
-
-class HickleSerializer(metaclass=SerializerMeta):
-    typ = ""  # irrelevant but 'b' gives problems
-    # https://github.com/telegraphic/hickle/issues/123
-    # fixed in hickle >= 3.4.7
-    ext = ".hkl"
-    load = staticmethod(hickle.load)
-    dump = staticmethod(hickle.dump)
 
 
 class NPYSerializer(metaclass=SerializerMeta):
