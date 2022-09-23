@@ -8,9 +8,6 @@ from ctypes.util import find_library
 
 import numpy as np
 
-# TODO: remove tenpy dependencies
-from tenpy.tools.events import EventHandler
-
 
 def set_num_threads(num):
     """
@@ -43,22 +40,6 @@ from simsio.simulations import Simulation
 
 logger = logging.getLogger(__name__)
 
-shelve = False
-checkpoint = EventHandler()
-
-
-def set_shelve(signum, frame):
-    global shelve
-    shelve = True
-    logger.warning(f"Signal {signum} received: shelving at checkpoint")
-
-
-def checkpointed(iterable):
-    for i in iterable:
-        logger.info("checkpoint after iteration step completed")
-        checkpoint.emit()
-        yield i
-
 
 def build_measures(measures, **context):
     # TODO: handle special notation for expectation values & correlation functions?
@@ -85,12 +66,10 @@ def append_measures(measures, results, target=None):
 def run_sim(**sim_kwargs):
     # TODO: generalize (or delegate) args parsing
     try:
-        signal.signal(signal.SIGUSR1, set_shelve)
         group, uid, nthreads = sys.argv[1:]
         set_num_threads(int(nthreads))
         sim_kwargs.setdefault("readonly", False)
         sim = Simulation(uid, group, **sim_kwargs)
-        checkpoint.connect(sim.dump)
     except:
         logger.exception("Uncaught exception while loading simulation")
         raise
