@@ -1,14 +1,43 @@
+import ctypes
 import logging
 import signal
 import sys
 import time
 from contextlib import contextmanager
+from ctypes.util import find_library
 
 import numpy as np
 
 # TODO: remove tenpy dependencies
 from tenpy.tools.events import EventHandler
-from tenpy.tools.process import mkl_set_nthreads, omp_set_nthreads
+
+
+def set_num_threads(num):
+    """
+    Tries setting OpenMP number of threads to `num`.
+
+    Parameters
+    ----------
+    num : int
+
+    Returns
+    -------
+    success : bool
+    """
+    for l in ["libiomp5.so", find_library("libiomp5md"), find_library("gomp")]:
+        if l is None:
+            continue
+        try:
+            omp = ctypes.CDLL(l)
+        except OSError:
+            pass
+        else:
+            omp.omp_set_num_threads(int(num))
+            return True
+
+    logger.error("OpenMP library not found: can't set nthreads")
+    return False
+
 
 from simsio.simulations import Simulation
 
@@ -58,8 +87,7 @@ def run_sim(**sim_kwargs):
     try:
         signal.signal(signal.SIGUSR1, set_shelve)
         group, uid, nthreads = sys.argv[1:]
-        nthreads = int(nthreads)
-        omp_set_nthreads(nthreads) or mkl_set_nthreads(nthreads)
+        set_num_threads(int(nthreads))
         sim_kwargs.setdefault("readonly", False)
         sim = Simulation(uid, group, **sim_kwargs)
         checkpoint.connect(sim.dump)
