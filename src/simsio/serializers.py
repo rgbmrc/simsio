@@ -68,7 +68,7 @@ class NPZSerializer(metaclass=SerializerMeta):
     def load(f):
         if _eof(f):
             return {}
-        with np.load(f) as f:
+        with np.load(f, allow_pickle=True) as f:
             return dict(f)  # np.load is lazy for .npz files
 
     @staticmethod
