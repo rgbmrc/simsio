@@ -76,11 +76,11 @@ def run_sim(**sim_kwargs):
 
     try:
         yield sim
+        sim.dump()
     except:
         logger.exception("Uncaught exception while running simulation")
         raise
     finally:
-        sim.dump()
         if hasattr(sim["par"], "warn_unused"):
             sim["par"].warn_unused(recursive=True)
         sim.close()
