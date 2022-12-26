@@ -1,3 +1,4 @@
+import argparse
 import ctypes
 import logging
 import signal
@@ -64,12 +65,17 @@ def append_measures(measures, results, target=None):
 
 @contextmanager
 def run_sim(**sim_kwargs):
-    # TODO: generalize (or delegate) args parsing
+    # TODO: delegate arg parsing
+    parser = argparse.ArgumentParser()
+    parser.add_argument("group", type=str, help="group match pattern")
+    parser.add_argument("uid", type=str, help="unique identifier of the simulation")
+    parser.add_argument("ncores", type=int, help="number of CPU cores to use")
+    args = parser.parse_args()
     try:
-        group, uid, nthreads = sys.argv[1:]
-        set_num_threads(int(nthreads))
+        set_num_threads(args.ncores)
         sim_kwargs.setdefault("readonly", False)
-        sim = Simulation(uid, group, **sim_kwargs)
+        sim = Simulation(args.uid, args.group, **sim_kwargs)
+        sim.run_args = args
     except:
         logger.exception("Uncaught exception while loading simulation")
         raise
