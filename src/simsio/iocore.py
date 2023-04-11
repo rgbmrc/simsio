@@ -43,6 +43,11 @@ class IOHandler:
         self.handles[key] = IOInfo(path, write_mode, serializer)
         logger.debug(f"Linked {key} with {path}")
 
+    def unlink(self, key):
+        path = self.handles.pop(key).storage
+        path.unlink(missing_ok=True)
+        logger.debug(f"Unlinked {key}, deleting path {path}")
+
     def load(self, key):
         info = self.handles[key]
         path = info.storage

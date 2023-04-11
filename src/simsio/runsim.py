@@ -1,3 +1,4 @@
+import argparse
 import ctypes
 import logging
 import signal
@@ -36,6 +37,7 @@ def set_num_threads(num):
     return False
 
 
+from simsio import rc
 from simsio.simulations import Simulation
 
 logger = logging.getLogger(__name__)
@@ -64,23 +66,35 @@ def append_measures(measures, results, target=None):
 
 @contextmanager
 def run_sim(**sim_kwargs):
-    # TODO: generalize (or delegate) args parsing
+    # TODO: delegate arg parsing
+    parser = argparse.ArgumentParser()
+    parser.add_argument("group", type=str, help="group match pattern")
+    parser.add_argument("uid", type=str, help="unique identifier of the simulation")
+    parser.add_argument("ncores", type=int, help="number of CPU cores to use")
+    parser.add_argument("--save-extras", action="store_true", help="save extras")
+    args = parser.parse_args()
     try:
-        group, uid, nthreads = sys.argv[1:]
-        set_num_threads(int(nthreads))
+        set_num_threads(args.ncores)
         sim_kwargs.setdefault("readonly", False)
-        sim = Simulation(uid, group, **sim_kwargs)
+        sim = Simulation(args.uid, args.group, **sim_kwargs)
+        sim.run_args = args
     except:
         logger.exception("Uncaught exception while loading simulation")
         raise
 
     try:
         yield sim
+        sim.dump()
+        # TODO: delgate to scripts for specific extras
+        # TODO: this does not work for handles that have been previously removed from cache
+        if not args.save_extras:
+            for key in sim:
+                if not key in rc["IO-handlers"]:
+                    sim.unlink(key)
     except:
         logger.exception("Uncaught exception while running simulation")
         raise
     finally:
-        sim.dump()
         if hasattr(sim["par"], "warn_unused"):
             sim["par"].warn_unused(recursive=True)
         sim.close()
