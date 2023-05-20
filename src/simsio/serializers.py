@@ -108,7 +108,7 @@ class JSONSerializer(metaclass=SerializerMeta):
 
     @staticmethod
     def dump(d, f):
-        json.dump(d, f, default=lambda o: vars(o))
+        json.dump(d, f, indent=2, default=lambda o: vars(o))
 
 
 class YAMLSerializer(metaclass=SerializerMeta):
