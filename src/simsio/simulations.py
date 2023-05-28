@@ -350,7 +350,7 @@ def load_config(uid, group=None, expand=True):
         raise KeyError(f"Key {uid} is reserved")
     for path in glob_groups(group):
         cfgs = yamlsf.load(path)
-        if cfg := cfgs.get(uid):
+        if cfgs and (cfg := cfgs.get(uid)):
             while path in _config_path_history:
                 _config_path_history.remove(path)
             _config_path_history.appendleft(path)
