@@ -221,24 +221,30 @@ def gen_configs(template, params, glob=None):
     return generated
 
 
-def get_sim(sim_or_uid):
+def get_sim(sim_or_uid, group=None):
     """
     Retreives a simulation from the cache, building it if not already present.
 
-    The eventual Simulation initialization uses default arguments.
+    The eventual Simulation initialization uses default arguments
+    (except for group, if provided).
     """
     if not sim_or_uid:
         return None
     if isinstance(sim_or_uid, Simulation):
         return sim_or_uid
     if sim_or_uid not in cache:
-        cache[sim_or_uid] = Simulation(sim_or_uid)
+        cache[sim_or_uid] = Simulation(sim_or_uid, group)
         logger.debug(f"Cached simulation {sim_or_uid}")
     return cache[sim_or_uid]
 
 
-def _get_params_vals(uids, keys):
-    pars = (get_sim(uid)["par"] for uid in uids)
+def _get_params_vals(sims, keys):
+    try:
+        sims = sims.items()
+        print(sims)
+    except AttributeError:
+        sims = map(tuple, sims)
+    pars = (get_sim(*sim)["par"] for sim in sims)
     for i, k in enumerate(keys):
         if isinstance(k, str):
             keys[i] = (k, dpath._DEFAULT_SENTINAL)
