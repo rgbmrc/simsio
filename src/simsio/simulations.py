@@ -241,10 +241,9 @@ def get_sim(sim_or_uid, group=None):
 def _get_params_vals(sims, keys):
     try:
         sims = sims.items()
-        print(sims)
     except AttributeError:
-        sims = map(tuple, sims)
-    pars = (get_sim(*sim)["par"] for sim in sims)
+        sims = ((s,) for s in sims)
+    pars = (get_sim(*sim).par for sim in sims)
     for i, k in enumerate(keys):
         if isinstance(k, str):
             keys[i] = (k, dpath._DEFAULT_SENTINAL)
@@ -252,7 +251,7 @@ def _get_params_vals(sims, keys):
     return tuple(zip(*vals))
 
 
-def uids_sort(uids, keys, return_vals=False):
+def uids_sort(sims, keys, return_vals=False):
     """
     Sorts a set of uids in lexicographic order according to the values of the given
     parmeters.
@@ -269,21 +268,21 @@ def uids_sort(uids, keys, return_vals=False):
     [type]
         [description]
     """
-    uids = list(uids)
-    vals = _get_params_vals(uids, keys)
+    sims = list(sims)
+    vals = _get_params_vals(sims, keys)
     idxs = np.lexsort(vals[::-1])
-    uids = [uids[i] for i in idxs]
+    sims = [sims[i] for i in idxs]
     if return_vals:
         vals = tuple(zip(*vals))
         vals = [vals[i] for i in idxs]
-        return uids, vals
-    return uids
+        return sims, vals
+    return sims
 
 
-def uids_grid(uids, keys):
+def uids_grid(sims, keys):
     # TODO: aliases for paths
-    vals = _get_params_vals(uids, keys)
-    idxs = np.empty((len(keys), len(uids)), dtype=np.intp)
+    vals = _get_params_vals(sims, keys)
+    idxs = np.empty((len(keys), len(sims)), dtype=np.intp)
     uniq = {}
     for j, ((k, d), v) in enumerate(zip(keys, vals)):
         u, i = np.unique(v, return_inverse=True)
@@ -292,8 +291,8 @@ def uids_grid(uids, keys):
     idxs = idxs.T
     grid = np.empty([len(u) for u in uniq.values()], dtype=UID_DTYPE)
     # grid = np.ma.masked_all([len(u) for u in uniq.values()], dtype=UID_DTYPE, fill_value='')
-    for i, uid in zip(idxs, uids):
-        grid[tuple(i)] = uid
+    for i, s in zip(idxs, sims):
+        grid[tuple(i)] = getattr(s, "uid", s)
     return grid, uniq
 
 

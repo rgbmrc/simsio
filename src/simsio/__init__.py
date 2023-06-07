@@ -1,6 +1,6 @@
 from configparser import ConfigParser
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 RC_FILE = ".simsiorc"
 rc = ConfigParser(interpolation=None)
