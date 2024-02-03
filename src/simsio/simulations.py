@@ -246,7 +246,7 @@ def _get_params_vals(sims, keys):
     pars = (get_sim(*sim).par for sim in sims)
     for i, k in enumerate(keys):
         if isinstance(k, str):
-            keys[i] = (k, dpath._DEFAULT_SENTINAL)
+            keys[i] = (k, dpath._DEFAULT_SENTINEL)
     vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
     return tuple(zip(*vals))
 
