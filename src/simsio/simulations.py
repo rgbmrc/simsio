@@ -85,8 +85,6 @@ CFG_EXT = ".yaml"
 CFG_DIR = Path(rc["configs"]["directory"])
 CFG_LOCK_ATTEMPT_FREQ = 3
 
-cache = {}
-
 # TODO: use file cache for _config_path_history
 HISTORY_FILE = ".simsio_history"
 _config_path_history = deque(maxlen=100)
@@ -232,10 +230,10 @@ def get_sim(sim_or_uid, group=None):
         return None
     if isinstance(sim_or_uid, Simulation):
         return sim_or_uid
-    if sim_or_uid not in cache:
-        cache[sim_or_uid] = Simulation(sim_or_uid, group)
+    if sim_or_uid not in Simulation.cache:
+        Simulation.cache[sim_or_uid] = Simulation(sim_or_uid, group)
         logger.debug(f"Cached simulation {sim_or_uid}")
-    return cache[sim_or_uid]
+    return Simulation.cache[sim_or_uid]
 
 
 def _get_params_vals(sims, keys):
@@ -392,6 +390,9 @@ def lock_config(path):
 
 
 class Simulation(Cache):
+
+    cache = {}
+
     def __init__(self, uid, group=None, readonly=True):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
