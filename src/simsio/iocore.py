@@ -33,12 +33,13 @@ class IOHandler:
             serializer = _get_mod_attr(serializer)()
 
         path = Path(path).with_suffix(serializer.ext)
-        if not self.readonly and write_mode:
+        if not self.readonly:
             # enusre storge directory exists
             path.parent.mkdir(parents=True, exist_ok=True)
-            # check storage file write permission
-            with open(path, "a"):
-                pass
+            if write_mode:
+                # check storage file write permission
+                with open(path, "a"):
+                    pass
 
         self.handles[key] = IOInfo(path, write_mode, serializer)
         logger.debug(f"Linked {key} with {path}")
