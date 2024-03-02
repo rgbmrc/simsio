@@ -55,6 +55,10 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_measures = self.par.setdefault("measures", [])
         self._p_qtea_sim = self.par.setdefault("qtea_sim", {})
         self._p_qtea_run = self.par.setdefault("qtea_run", {})
+        # FIXME: HACK combined with .simsiorc:
+        # res_np = results/$uid/measures, w, simsio.serializers.NPZSerializer
+        # res_json = results/$uid/measures, w, simsio.serializers.JSONSerializer
+        self.res = ChainMap(self.res_json, self.res_np)
 
     def _init_convergence(self):
         # TODO: TNConvergenceParametersFiniteT
