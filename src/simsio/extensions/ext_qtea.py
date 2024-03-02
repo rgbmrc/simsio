@@ -27,6 +27,7 @@ def gen_seed(seed=None):
 def extract_sweep_time_energy(uid):
     try:
         uid = uid.strip("-R")
+        # HACK: retreive path
         cnv_file = f"data/{uid}/output/convergence.log"
         # if empty data unpacking fails with ValueError
         t, e = np.loadtxt(cnv_file, skiprows=1, ndmin=2).T
@@ -64,13 +65,13 @@ class QuantumGreenTeaSimulation(Simulation):
     def _init_observables(self):
         # TODO: args: num_trajectories, do_write_hdf5
         observables = TNObservables()
-        for obs in self._p_measures:
-            # each list entry is a dictionary with a single entry:
-            # observable_class: list_of_arguments or None
-            ((obs_class, obs_args),) = obs.items()
+        # each list entry is a dictionary with a single entry:
+        # observable_class: list_of_arguments or None
+        for obs_class, obs_args in self._p_measures:
+            if obs_class == "TNState2File":
+                # HACK: use serializer, retreive path
+                obs_args[0] = f"data/{self.uid}/output/{obs_args[0]}"
             obs_class = getattr(qtealeaves.observables, obs_class)
-            if obs_args is None:
-                obs_args = []
             observables += obs_class(*obs_args)
         return observables
 
@@ -84,9 +85,9 @@ class QuantumGreenTeaSimulation(Simulation):
             operators=operators,
             convergence=self._init_convergence(),
             observables=self._init_observables(),
-            # use rc settings?
-            folder_name_input=f"data/{self.uid}/input",
-            folder_name_output=f"data/{self.uid}/output",
+            # HACK: use rc settings
+            folder_name_input=f"data/{self.uid}/input/",
+            folder_name_output=f"data/{self.uid}/output/",
             has_log_file=False,  # logging handled by simsio
             **self._p_qtea_sim,
         )
