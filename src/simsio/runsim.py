@@ -10,6 +10,9 @@ from ctypes.util import find_library
 import numpy as np
 
 
+ARG_DELIM = "--"
+
+
 def set_num_threads(num):
     """
     Tries setting OpenMP number of threads to `num`.
@@ -67,21 +70,21 @@ def append_measures(measures, results, target=None):
 
 @contextmanager
 def run_sim(sim_class=Simulation, **sim_kwargs):
-    # TODO: delegate arg parsing
     # TODO: sim_class in rc
+    delim = sys.argv.index(ARG_DELIM) if ARG_DELIM in sys.argv else len(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument("group", type=str, help="group match pattern")
     parser.add_argument("uid", type=str, help="unique identifier of the simulation")
     parser.add_argument("ncores", type=int, help="number of CPU cores to use")
     parser.add_argument("--save-extras", action="store_true", help="save extras")
-    args = parser.parse_args()
+    args = parser.parse_args(args=sys.argv[1:delim])
     try:
         if isinstance(sim_class, str):
             sim_class = _get_mod_attr(sim_class)
         set_num_threads(args.ncores)
         sim_kwargs.setdefault("readonly", False)
         sim = sim_class(args.uid, args.group, **sim_kwargs)
-        sim.run_args = args
+        sim.run_args = sys.argv[delim + 1 :]
     except:
         logger.exception("Uncaught exception while loading simulation")
         raise
