@@ -111,7 +111,7 @@ class QuantumGreenTeaSimulation(Simulation):
         # HACK: TODO: test
         qtea_cnv_log = Path(self.qtea_sim.folder_name_output, "convergence.log")
         qtea_cnv_log.touch()
-        self.handles["convergence"].storage.hardlink_to(qtea_cnv_log)
+        self.handles["cnv"].storage.hardlink_to(qtea_cnv_log)
 
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=True)
