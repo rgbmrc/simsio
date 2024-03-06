@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from collections import ChainMap
 from inspect import signature
 
@@ -36,7 +38,10 @@ def extract_sweep_time_energy(uid):
         return np.zeros((2, 0))
 
 
-def unravel(obs1d, *, argmap, lvals, ndim=None):
+def unravel(obs1d, lvals, *, ndim=None, map_type="HilbertCurveMap", argmap=None):
+    if argmap is None:
+        posmap = map_selector(len(lvals), lvals, map_type)
+        argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
     ndim = ndim or np.ndim(obs1d)
     if ndim == 0:  # scalar
         return obs1d
@@ -98,16 +103,22 @@ class QuantumGreenTeaSimulation(Simulation):
         #     dpath.get(self, g)
         run_params = self._p_qtea_run | {"seed": seed}
 
-        mod = self.qtea_sim.model
-        lvals = mod.eval_lvals(run_params)  # if parameterized in model
-        posmap = map_selector(mod.dim, lvals, mod.map_type)
+        lvals = model.eval_lvals(run_params)  # if parameterized in model
+        posmap = map_selector(model.dim, lvals, model.map_type)
         argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
         self._unravel_args = dict(argmap=argmap, lvals=lvals)
+
+        # HACK: TODO: test
+        qtea_cnv_log = Path(self.qtea_sim.folder_name_output, "convergence.log")
+        qtea_cnv_log.touch()
+        self.handles["convergence"].storage.hardlink_to(qtea_cnv_log)
 
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=True)
 
     def dump(self, wait=0, **keyvals):
+        _, cpu_time = next(self.qtea_sim.observables.read_cpu_time_from_log())
+        self.runtime_info(ext_cpu_time=cpu_time)
         p = {}  # output_folder is never parameterized
         measures = self.qtea_sim.get_static_obs(p)
         proj_meas = measures.pop("projective_measurements")

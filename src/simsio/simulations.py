@@ -472,14 +472,14 @@ class Simulation(Cache):
         else:
             return super().__getattribute__(name)
 
-    def runtime_info(self):
+    def runtime_info(self, ext_cpu_time=0.0):
         """Integrates simulation params with runtime info and returns it."""
+        # TODO: ext_cpu_time ugly (used by extensions.ext_qtea)
         info = {}
-
         # cpu time
         cpu_time_path = "monitoring/cpu_time"
         delta = time.process_time() - self._cpu_clock
-        self._cpu_clock += delta
+        self._cpu_clock += delta + ext_cpu_time
         cpu_time = dpath.get(self["par"], cpu_time_path, default=0.0)
         dpath.new(info, cpu_time_path, cpu_time + delta)
 
