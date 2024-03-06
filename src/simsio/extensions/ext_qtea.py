@@ -101,7 +101,10 @@ class QuantumGreenTeaSimulation(Simulation):
         # FIXME: allow selection of what to include based on rc
         # for g in globs:
         #     dpath.get(self, g)
-        run_params = self._p_qtea_run | {"seed": seed}
+        run_params = self._p_qtea_run | {
+            "seed": seed,
+            "log_file": self.handles["log"].storage,
+        }
 
         lvals = model.eval_lvals(run_params)  # if parameterized in model
         posmap = map_selector(model.dim, lvals, model.map_type)
@@ -110,6 +113,8 @@ class QuantumGreenTeaSimulation(Simulation):
 
         # HACK: TODO: test
         qtea_cnv_log = Path(self.qtea_sim.folder_name_output, "convergence.log")
+        # FIXME: handle this elsewhere
+        qtea_cnv_log.parent.mkdir(parents=True, exist_ok=True)
         qtea_cnv_log.touch()
         simsio_cnv_log = self.handles["cnv"].storage
         simsio_cnv_log.unlink(missing_ok=True)
@@ -119,16 +124,23 @@ class QuantumGreenTeaSimulation(Simulation):
         self.qtea_sim.run(run_params, delete_existing_folder=True)
 
     def dump(self, wait=0, **keyvals):
-        _, cpu_time = next(self.qtea_sim.observables.read_cpu_time_from_log())
+        # HACK
+        p = {"log_file": self.handles["log"].storage.absolute()}
+        _, cpu_time = next(self.qtea_sim.observables.read_cpu_time_from_log("/", p))
         self.runtime_info(ext_cpu_time=cpu_time)
-        p = {}  # output_folder is never parameterized
+        # output_folder is never parameterized
         measures = self.qtea_sim.get_static_obs(p)
         proj_meas = measures.pop("projective_measurements")
         assert not proj_meas, "projective measurements unsupported"
-        # TODO: genralize
-        bond_ent = measures.pop("bond_entropy0")
-        self.res["entropy_cut"] = list(bond_ent.keys())
-        self.res["entropy_val"] = list(bond_ent.values())
+        # TODO: can you QTEA people please pick a name and stick to it, for god's sake
+        bond_ent = (
+            measures.pop("bondentropy", None)
+            or measures.pop("bond_entropy", None)
+            or measures.pop("bond_entropy0", None)
+        )
+        if bond_ent:
+            self.res["entropy_cut"] = list(bond_ent.keys())
+            self.res["entropy_val"] = list(bond_ent.values())
         for k, v in measures.items():
             self.res[k] = self._unravel_observable(v)
         super().dump(wait, **keyvals)
