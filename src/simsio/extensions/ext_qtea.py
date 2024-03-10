@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from collections import ChainMap
 from inspect import signature
+import logging
 
 import dpath
 import numpy as np
@@ -11,6 +12,8 @@ from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
 
 from simsio.simulations import Simulation
+
+logger = logging.getLogger(__name__)
 
 
 def update_params_with_defaults(func, kwargs):
@@ -109,7 +112,10 @@ class QuantumGreenTeaSimulation(Simulation):
         qtea_cnv_log.touch()
         simsio_cnv_log = self.handles["cnv"].storage
         simsio_cnv_log.unlink(missing_ok=True)
-        simsio_cnv_log.hardlink_to(qtea_cnv_log)
+        try:
+            simsio_cnv_log.hardlink_to(qtea_cnv_log)
+        except OSError:
+            logger.error("Could not hardlink convergence file.", exc_info=True)
 
     def run_qtea_simulation(self):
         seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
