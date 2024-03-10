@@ -83,7 +83,7 @@ class QuantumGreenTeaSimulation(Simulation):
     def _unravel_observable(self, obs):
         return unravel(obs, **self._unravel_args)
 
-    def run_qtea_simulation(self, model, operators):
+    def init_qtea_simulation(self, model, operators):
         update_params_with_defaults(ATTNSimulation, self._p_qtea_sim)
         self.qtea_sim = ATTNSimulation(
             model=model,
@@ -97,19 +97,10 @@ class QuantumGreenTeaSimulation(Simulation):
             **self._p_qtea_sim,
         )
 
-        seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
-        # FIXME: allow selection of what to include based on rc
-        # for g in globs:
-        #     dpath.get(self, g)
-        run_params = self._p_qtea_run | {
-            "seed": seed,
-            "log_file": self.handles["log"].storage,
-        }
-
-        lvals = model.eval_lvals(run_params)  # if parameterized in model
-        posmap = map_selector(model.dim, lvals, model.map_type)
+        # TODO: support parameterized lvals
+        posmap = map_selector(model.dim, model.lvals, model.map_type)
         argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
-        self._unravel_args = dict(argmap=argmap, lvals=lvals)
+        self._unravel_args = dict(argmap=argmap, lvals=model.lvals)
 
         # HACK: TODO: test
         qtea_cnv_log = Path(self.qtea_sim.folder_name_output, "convergence.log")
@@ -120,6 +111,15 @@ class QuantumGreenTeaSimulation(Simulation):
         simsio_cnv_log.unlink(missing_ok=True)
         simsio_cnv_log.hardlink_to(qtea_cnv_log)
 
+    def run_qtea_simulation(self):
+        seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
+        # FIXME: allow selection of what to include based on rc
+        # for g in globs:
+        #     dpath.get(self, g)
+        run_params = self._p_qtea_run | {
+            "seed": seed,
+            "log_file": self.handles["log"].storage,
+        }
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=True)
 
