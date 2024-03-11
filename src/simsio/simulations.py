@@ -83,7 +83,7 @@ UID_REGEX = "[a-z0-9]{32}"
 
 CFG_EXT = ".yaml"
 CFG_DIR = Path(rc["configs"]["directory"])
-CFG_LOCK_ATTEMPT_FREQ = 3
+CFG_LOCK_ATTEMPT_FREQ = 1
 
 # TODO: use file cache for _config_path_history
 HISTORY_FILE = ".simsio_history"
