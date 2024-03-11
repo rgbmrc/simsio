@@ -117,7 +117,7 @@ class QuantumGreenTeaSimulation(Simulation):
         except OSError:
             logger.error("Could not hardlink convergence file.", exc_info=True)
 
-    def run_qtea_simulation(self):
+    def run_qtea_simulation(self, overwrite=True):
         seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
         # FIXME: allow selection of what to include based on rc
         # for g in globs:
@@ -127,7 +127,7 @@ class QuantumGreenTeaSimulation(Simulation):
             "log_file": self.handles["log"].storage,
         }
         # we always run a single thread
-        self.qtea_sim.run(run_params, delete_existing_folder=True)
+        self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
     def dump(self, wait=0, **keyvals):
         # HACK
