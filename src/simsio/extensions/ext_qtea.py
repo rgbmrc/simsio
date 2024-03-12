@@ -83,8 +83,8 @@ class QuantumGreenTeaSimulation(Simulation):
             observables += obs_class(*obs_args)
         return observables
 
-    def _unravel_observable(self, obs):
-        return unravel(obs, **self._unravel_args)
+    def _unravel_observable(self, obs, ndim=None):
+        return unravel(obs, ndim=ndim, **self._unravel_args)
 
     def init_qtea_simulation(self, model, operators):
         update_params_with_defaults(ATTNSimulation, self._p_qtea_sim)
