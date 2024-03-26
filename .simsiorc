@@ -19,4 +19,5 @@ datefmt = %Y-%m-%d %H:%M
 
 [logging-levels]
 root = INFO
+simsio = INFO
 simsio.iocore = WARNING
