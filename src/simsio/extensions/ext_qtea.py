@@ -92,9 +92,6 @@ class QuantumGreenTeaSimulation(Simulation):
             observables += obs_class(*obs_args)
         return observables
 
-    def _init_quenches(self):
-        pass
-
     def _unravel_observable(self, obs, ndim=0):
         return unravel(obs, ndim=ndim, **self._unravel_args)
 
