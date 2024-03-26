@@ -1,19 +1,25 @@
 import os
-from pathlib import Path
-from collections import ChainMap
-from inspect import signature
 import logging
+from collections import ChainMap, defaultdict
+from inspect import signature
+from itertools import chain
+from pathlib import Path
 
 import dpath
 import numpy as np
-import qtealeaves.observables
-from qtealeaves import ATTNSimulation, map_selector
+import qtealeaves as qtea
+from qtealeaves import map_selector
 from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
 
 from simsio.simulations import Simulation
 
 logger = logging.getLogger(__name__)
+
+try:
+    QTEASimulation = qtea.QuantumGreenTeaSimulation
+except AttributeError:
+    QTEASimulation = qtea.ATTNSimulation  # legacy version
 
 
 def update_params_with_defaults(func, kwargs):
@@ -41,11 +47,12 @@ def extract_sweep_time_energy(uid):
         return np.zeros((2, 0))
 
 
-def unravel(obs1d, lvals, *, ndim=None, map_type="HilbertCurveMap", argmap=None):
+def unravel(obs1d, lvals, *, ndim=0, map_type="HilbertCurveMap", argmap=None):
     if argmap is None:
         posmap = map_selector(len(lvals), lvals, map_type)
         argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
-    ndim = ndim or np.ndim(obs1d)
+    if not ndim > 0:
+        ndim = np.ndim(obs1d) + ndim
     if ndim == 0:  # scalar
         return obs1d
     obs1d = np.asanyarray(obs1d)
@@ -55,6 +62,8 @@ def unravel(obs1d, lvals, *, ndim=None, map_type="HilbertCurveMap", argmap=None)
 
 
 class QuantumGreenTeaSimulation(Simulation):
+
+    unravel_classes = {"TNObsLocal", "TNObsCorr"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -79,16 +88,19 @@ class QuantumGreenTeaSimulation(Simulation):
             if obs_class == "TNState2File":
                 # HACK: use serializer, retreive path
                 obs_args[0] = f"data/{self.uid}/output/{obs_args[0]}"
-            obs_class = getattr(qtealeaves.observables, obs_class)
+            obs_class = getattr(qtea.observables, obs_class)
             observables += obs_class(*obs_args)
         return observables
 
-    def _unravel_observable(self, obs, ndim=None):
+    def _init_quenches(self):
+        pass
+
+    def _unravel_observable(self, obs, ndim=0):
         return unravel(obs, ndim=ndim, **self._unravel_args)
 
     def init_qtea_simulation(self, model, operators):
-        update_params_with_defaults(ATTNSimulation, self._p_qtea_sim)
-        self.qtea_sim = ATTNSimulation(
+        update_params_with_defaults(QTEASimulation, self._p_qtea_sim)
+        self.qtea_sim = QTEASimulation(
             model=model,
             operators=operators,
             convergence=self._init_convergence(),
@@ -118,35 +130,61 @@ class QuantumGreenTeaSimulation(Simulation):
             logger.error("Could not hardlink convergence file.", exc_info=True)
 
     def run_qtea_simulation(self, overwrite=True):
-        seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
         # FIXME: allow selection of what to include based on rc
         # for g in globs:
         #     dpath.get(self, g)
-        run_params = self._p_qtea_run | {
-            "seed": seed,
-            "log_file": self.handles["log"].storage,
+        seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
+        self._p_qtea_run |= {
+            # TODO: str() cause QTEA doesn't do well with pathlib.Path
+            "log_file": str(self.handles["log"].storage.absolute()),
         }
+        run_params = self._p_qtea_run | {"seed": seed, **self._p_model}
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
     def dump(self, wait=0, **keyvals):
-        # HACK
-        p = {"log_file": self.handles["log"].storage.absolute()}
-        _, cpu_time = next(self.qtea_sim.observables.read_cpu_time_from_log("/", p))
-        self.runtime_info(ext_cpu_time=cpu_time)
-        # output_folder is never parameterized
-        measures = self.qtea_sim.get_static_obs(p)
-        proj_meas = measures.pop("projective_measurements")
-        assert not proj_meas, "projective measurements unsupported"
-        # TODO: can you QTEA people please pick a name and stick to it, for god's sake
-        bond_ent = (
-            measures.pop("bondentropy", None)
-            or measures.pop("bond_entropy", None)
-            or measures.pop("bond_entropy0", None)
+        try:
+            _, cpu_time = next(
+                self.qtea_sim.observables.read_cpu_time_from_log("/", self._p_qtea_run)
+            )
+        except StopIteration:
+            # QTEA's python side does not log CPU time (only simulation time)
+            # better so, cause already accounted for by simsio
+            logger.warning("Could not read CPU time from log.")
+        else:
+            self.runtime_info(ext_cpu_time=cpu_time)
+        # concatenate static & quenches
+        measures_list = chain(
+            [self.qtea_sim.get_static_obs(self._p_qtea_run)],
+            *self.qtea_sim.get_dynamic_obs(self._p_qtea_run),
         )
-        if bond_ent:
-            self.res["entropy_cut"] = list(bond_ent.keys())
-            self.res["entropy_val"] = list(bond_ent.values())
-        for k, v in measures.items():
-            self.res[k] = self._unravel_observable(v)
+        measures = defaultdict(list)
+        for step, m in enumerate(measures_list):
+            # parse measurements at each step
+            m.setdefault("time", 0.0)
+            # QTEA returns projective_measurements even when not requested
+            proj_meas = m.pop("projective_measurements")
+            assert not proj_meas, "projective measurements unsupported"
+            # store bipartition entropies in a numpy compatible format
+            entropy = (  # QTEA used multiple names over time
+                m.pop("bondentropy", None)
+                or m.pop("bond_entropy", None)
+                or m.pop("bond_entropy0", None)
+            )
+            if entropy:
+                m["entropy_cut"] = list(entropy.keys())
+                m["entropy_val"] = list(entropy.values())
+            # append to measurments dict
+            for k, v in m.items():
+                measures[k].append(v)
+        # unravel observables of classes listed in self.unravel_classes
+        for obs_class, obs_args in self._p_measures:
+            if obs_class in self.unravel_classes:
+                k = obs_args[0]
+                measures[k] = self._unravel_observable(measures[k], ndim=-1)
+        # drop trivial time index for statics
+        if step == 0:
+            for k, vs in measures:
+                measures[k] = vs[0]
+        self.res |= measures
         super().dump(wait, **keyvals)
