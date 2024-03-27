@@ -139,7 +139,7 @@ class QuantumGreenTeaSimulation(Simulation):
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
-    def dump(self, wait=0, **keyvals):
+    def _parse_results(self):
         try:
             _, cpu_time = next(
                 self.qtea_sim.observables.read_cpu_time_from_log("/", self._p_qtea_run)
@@ -184,4 +184,8 @@ class QuantumGreenTeaSimulation(Simulation):
             for k, vs in measures:
                 measures[k] = vs[0]
         self.res |= measures
+
+    def dump(self, wait=0, **keyvals):
+        if not self.res:
+            self._parse_results()
         super().dump(wait, **keyvals)
