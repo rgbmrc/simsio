@@ -24,6 +24,7 @@ except AttributeError:
 
 def update_params_with_defaults(func, kwargs):
     ba = signature(func).bind_partial(**kwargs)
+    ba.apply_defaults()
     kwargs |= ba.arguments
 
 
@@ -97,15 +98,15 @@ class QuantumGreenTeaSimulation(Simulation):
 
     def init_qtea_simulation(self, model, operators):
         update_params_with_defaults(QTEASimulation, self._p_qtea_sim)
+        # HACK: use rc settings
+        self._p_qtea_sim["folder_name_input"] = f"data/{self.uid}/input/"
+        self._p_qtea_sim["folder_name_output"] = f"data/{self.uid}/output/"
+        self._p_qtea_sim["has_log_file"] = False  # logging handled by simsio
         self.qtea_sim = QTEASimulation(
             model=model,
             operators=operators,
             convergence=self._init_convergence(),
             observables=self._init_observables(),
-            # HACK: use rc settings
-            folder_name_input=f"data/{self.uid}/input/",
-            folder_name_output=f"data/{self.uid}/output/",
-            has_log_file=False,  # logging handled by simsio
             **self._p_qtea_sim,
         )
 
@@ -181,7 +182,7 @@ class QuantumGreenTeaSimulation(Simulation):
                 measures[k] = self._unravel_observable(measures[k], ndim=-1)
         # drop trivial time index for statics
         if step == 0:
-            for k, vs in measures:
+            for k, vs in measures.items():
                 measures[k] = vs[0]
         self.res |= measures
 
