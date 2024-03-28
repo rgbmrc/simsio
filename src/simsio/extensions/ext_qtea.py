@@ -181,7 +181,7 @@ class QuantumGreenTeaSimulation(Simulation):
                 measures[k] = self._unravel_observable(measures[k], ndim=-1)
         # drop trivial time index for statics
         if step == 0:
-            for k, vs in measures:
+            for k, vs in measures.items():
                 measures[k] = vs[0]
         self.res |= measures
         super().dump(wait, **keyvals)
