@@ -24,6 +24,7 @@ except AttributeError:
 
 def update_params_with_defaults(func, kwargs):
     ba = signature(func).bind_partial(**kwargs)
+    ba.apply_defaults()
     kwargs |= ba.arguments
 
 
