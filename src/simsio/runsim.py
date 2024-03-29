@@ -84,6 +84,7 @@ def run_sim(sim_class=Simulation, **sim_kwargs):
         set_num_threads(args.ncores)
         sim_kwargs.setdefault("readonly", False)
         sim = sim_class(args.uid, args.group, **sim_kwargs)
+        sim.ini_args = args
         sim.run_args = sys.argv[delim + 1 :]
     except:
         logger.exception("Uncaught exception while loading simulation")
