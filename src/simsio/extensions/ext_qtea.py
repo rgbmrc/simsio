@@ -74,6 +74,9 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_measures = self.par.setdefault("measures", [])
         self._p_qtea_sim = self.par.setdefault("qtea_sim", {})
         self._p_qtea_run = self.par.setdefault("qtea_run", {})
+        # in QTEA since commit de8717c13e297ac5acbf0ea36448fa52c532b1af
+        # here for backwards commpatibility
+        self._p_qtea_run.setdefault("Quenches", [])
 
     def _init_convergence(self):
         # TODO: TNConvergenceParametersFiniteT
