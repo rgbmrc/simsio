@@ -1,6 +1,7 @@
 import argparse
 import ctypes
 import logging
+import shlex
 import signal
 import sys
 import time
@@ -69,7 +70,7 @@ def append_measures(measures, results, target=None):
 
 
 @contextmanager
-def run_sim(sim_class=Simulation, **sim_kwargs):
+def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     # TODO: sim_class in rc
     delim = sys.argv.index(ARG_DELIM) if ARG_DELIM in sys.argv else len(sys.argv)
     parser = argparse.ArgumentParser()
@@ -78,18 +79,20 @@ def run_sim(sim_class=Simulation, **sim_kwargs):
     parser.add_argument("ncores", type=int, help="number of CPU cores to use")
     parser.add_argument("--save-extras", action="store_true", help="save extras")
     args = parser.parse_args(args=sys.argv[1:delim])
+    set_num_threads(args.ncores)
+    if isinstance(sim_class, str):
+        sim_class = _get_mod_attr(sim_class)
+    sim_kwargs.setdefault("readonly", False)
     try:
-        if isinstance(sim_class, str):
-            sim_class = _get_mod_attr(sim_class)
-        set_num_threads(args.ncores)
-        sim_kwargs.setdefault("readonly", False)
         sim = sim_class(args.uid, args.group, **sim_kwargs)
-        sim.ini_args = args
-        sim.run_args = sys.argv[delim + 1 :]
-    except:
-        logger.exception("Uncaught exception while loading simulation")
-        raise
-
+    except KeyError as e:  # TODO: custom exception, missing config file or uid?
+        if not_found_ok:
+            logger.error(e.args[0])
+            sys.exit()
+        else:
+            raise
+    sim.ini_args = args
+    sim.run_args = sys.argv[delim + 1 :]
     try:
         yield sim
         sim.dump()
@@ -100,9 +103,7 @@ def run_sim(sim_class=Simulation, **sim_kwargs):
                 if not key in rc["IO-handlers"]:
                     sim.unlink(key)
     except:
-        logger.exception("Uncaught exception while running simulation")
+        logger.critical("Uncaught exception while running simulation")
         raise
     finally:
-        if hasattr(sim["par"], "warn_unused"):
-            sim["par"].warn_unused(recursive=True)
         sim.close()

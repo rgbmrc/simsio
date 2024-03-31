@@ -417,9 +417,7 @@ class Simulation(Cache):
         # setup logging
         if not readonly:
             self.setup_logging()
-            logger.info(
-                f"Running {shlex.join(sys.argv)}, config found in {self.cfg_path}",
-            )
+            logger.info(f"Running %s", shlex.join(sys.argv))
 
         # handle readonly uninitiazlized simulation
         try:
