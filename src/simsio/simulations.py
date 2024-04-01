@@ -15,6 +15,7 @@
 """
 
 import fcntl
+import fileinput
 import logging
 import logging.config
 import re
@@ -84,6 +85,7 @@ UID_REGEX = "[a-z0-9]{32}"
 CFG_EXT = ".yaml"
 CFG_DIR = Path(rc["configs"]["directory"])
 CFG_LOCK_ATTEMPT_FREQ = 1
+RESERVED_KEYS = {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}
 
 # TODO: use file cache for _config_path_history
 HISTORY_FILE = ".simsio_history"
@@ -296,33 +298,35 @@ def uids_grid(sims, keys):
 
 def sort_config(glob, keys):
     tag = rc["configs"]["header_tag"]
-    for path in glob_groups(glob):
-        with lock_config(path) as cfg:
-            header = cfg.pop(tag, None)
-            for u in reversed(uids_sort(cfg, keys)):
-                cfg.insert(0, u, cfg.pop(u))
-            if header:
-                cfg.insert(0, tag, header)
+    for p in glob_groups(glob):
+        with lock_config(p) as f:
+            with update_config(f) as cfg:
+                header = cfg.pop(tag, None)
+                for u in reversed(uids_sort(cfg, keys)):
+                    cfg.insert(0, u, cfg.pop(u))
+                if header:
+                    cfg.insert(0, tag, header)
 
 
 def pop(*uids, group=None):
     cfgs_paths = defaultdict(set)
-    for u in uids:
+    for u in uids:  # TODO: use SimsQuery
         p, _ = load_config(u, group, expand=False)
         cfgs_paths[p].add(u)
     for p, us in cfgs_paths.items():
-        with lock_config(p) as cfg:
-            for u in us:
-                for h in rc["IO-handlers"].values():
-                    glob = h.split(",")[0].strip()
-                    glob = Template(glob).substitute(uid=u, key="*")
-                    for p in Path(dir).glob(u):  # TODO: make recursive?
-                        if p.is_file():
-                            p.unlink()
-                        elif p.is_dir():
-                            rmtree(p)
-                cfg.pop(u)
-                logger.info(f"Deleted {u}")
+        with lock_config(p) as f:
+            with update_config(f) as cfg:
+                for u in us:
+                    for h in rc["IO-handlers"].values():
+                        glob = h.split(",")[0].strip()
+                        glob = Template(glob).substitute(uid=u, key="*")
+                        for p in Path(dir).glob(u):  # TODO: make recursive?
+                            if p.is_file():
+                                p.unlink()
+                            elif p.is_dir():
+                                rmtree(p)
+                    cfg.pop(u)
+                    logger.info(f"Deleted {u}")
 
 
 def _merge(dst, src):
@@ -349,7 +353,7 @@ def _expand(config, templates):
 
 
 def load_config(uid, group=None, expand=True):
-    if uid in (rc["configs"]["header_tag"], rc["configs"]["header_ref"]):
+    if uid in RESERVED_KEYS:
         raise KeyError(f"Key {uid} is reserved")
     for path in glob_groups(group):
         cfgs = yamlsf.load(path)
@@ -379,21 +383,55 @@ def lock_config(path):
                 time.sleep(1.0 / CFG_LOCK_ATTEMPT_FREQ)
                 continue
             else:
-                cfgs = yamlrt.load(f)
-                yield cfgs
-                f.seek(0)
-                f.truncate()
-                yamlrt.dump(cfgs, f)
+                yield f
                 break
         else:
             raise error
+
+
+@contextmanager
+def update_config(f):
+    cfgs = yamlrt.load(f)
+    yield cfgs
+    f.seek(0)
+    yamlrt.dump(cfgs, f)
+    f.truncate()
+
+
+def update_config_uid(path, old_uid, new_uid, template=None):
+    if template is None:
+        template = rc["configs"].getboolean("template")
+    ref_uid = new_uid.rstrip("-R")
+    map_uid = {old_uid: ref_uid}
+    template = template and ref_uid != old_uid
+    with lock_config(path) as f:
+        # >1e3 times faster on O(1e3) lines
+        if rc["configs"].getboolean("unsafe_update"):
+            for l in fileinput.input(files=path, inplace=True):
+                # NOTE: regex? formatters (or gen_configs) remove eventual
+                # qutation marks around uuids or top level indentation
+                # but user could force them and still have valid yaml
+                if l.startswith(old_uid):
+                    l = l.replace(old_uid, new_uid, 1)  # update uid
+                if template:
+                    l = Template(l).safe_substitute(map_uid)  # template refs
+                sys.stdout.write(l)
+        else:
+            with update_config(f) as cfg:
+                # update uid
+                cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
+                # template refs
+                if template:
+                    for p, leaf in dpath.search(cfg, "**", yielded=True):
+                        if isinstance(leaf, str) and old_uid in leaf:
+                            dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
 
 
 class Simulation(Cache):
 
     cache = {}
 
-    def __init__(self, uid, group=None, readonly=True):
+    def __init__(self, uid, group=None, readonly=True, template=None):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
 
@@ -406,9 +444,7 @@ class Simulation(Cache):
         # before writing/linking anything get config
         if not readonly:
             self.cfg_path, cfg = load_config(uid, group)
-            # update uid in config
-            with lock_config(self.cfg_path) as cfgs:
-                cfgs.insert(list(cfgs).index(uid), f"{self.uid}-R", cfgs.pop(uid))
+            update_config_uid(self.cfg_path, uid, f"{self.uid}-R", template)
 
         for key in rc["IO-handlers"]:
             if key != "dat":
@@ -447,17 +483,11 @@ class Simulation(Cache):
             if diff:
                 dictdiffer.patch(diff, self["par"], in_place=True)
                 msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
-                msg = "\n".join(("Config changes", msg, "=" * 80))
-                logger.warning(msg)
-
-        # self['par'].touch('version', 'monitor')
+                logger.warning("Config changes\n%s\n%s", msg, "=" * 80)
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            uid_R = f"{self.uid}-R"
-            # update uid in config
-            with lock_config(self.cfg_path) as cfgs:
-                cfgs.insert(list(cfgs).index(uid_R), self.uid, cfgs.pop(uid_R))
+            update_config_uid(self.cfg_path, f"{self.uid}-R", self.uid)
 
     def __repr__(self):
         cls = self.__class__.__name__
