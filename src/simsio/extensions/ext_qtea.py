@@ -91,7 +91,8 @@ class QuantumGreenTeaSimulation(Simulation):
         for obs_class, obs_args in self._p_measures:
             if obs_class == "TNState2File":
                 # HACK: use serializer, retreive path
-                obs_args[0] = f"data/{self.uid}/output/{obs_args[0]}"
+                state_path = f"data/{self.uid}/output/{obs_args[0]}"
+                obs_args = [state_path, *obs_args[1:]]
             obs_class = getattr(qtea.observables, obs_class)
             observables += obs_class(*obs_args)
         return observables
@@ -140,6 +141,7 @@ class QuantumGreenTeaSimulation(Simulation):
         run_params = self._p_qtea_run | {"seed": seed, **self._p_model}
         if ref_uid := run_params.get("continue_file"):
             # TODO: only works for
+            # - states named "state"
             # - unformatted (no formatted)
             # - python (no fortran)
             # - TTNs (no other ansatzes)
@@ -147,7 +149,7 @@ class QuantumGreenTeaSimulation(Simulation):
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
-    def dump(self, wait=0, **keyvals):
+    def _parse_results(self):
         try:
             _, cpu_time = next(
                 self.qtea_sim.observables.read_cpu_time_from_log("/", self._p_qtea_run)
@@ -181,6 +183,8 @@ class QuantumGreenTeaSimulation(Simulation):
                 m["entropy_val"] = list(entropy.values())
             # append to measurments dict
             for k, v in m.items():
+                # HACK: states
+                k = k.removeprefix(f"data/{self.uid}/output/")
                 measures[k].append(v)
         # unravel observables of classes listed in self.unravel_classes
         for obs_class, obs_args in self._p_measures:
@@ -192,4 +196,8 @@ class QuantumGreenTeaSimulation(Simulation):
             for k, vs in measures.items():
                 measures[k] = vs[0]
         self.res |= measures
+
+    def dump(self, wait=0, **keyvals):
+        if not self.res:
+            self._parse_results()
         super().dump(wait, **keyvals)
