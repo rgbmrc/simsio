@@ -10,6 +10,13 @@ from ctypes.util import find_library
 
 import numpy as np
 
+from simsio import rc
+from simsio.iocore import _get_mod_attr
+from simsio.simulations import Simulation
+
+__all__ = ["argparse", "run_sim"]
+
+logger = logging.getLogger(__name__)
 
 ARG_DELIM = "--"
 
@@ -26,7 +33,12 @@ def set_num_threads(num):
     -------
     success : bool
     """
-    for l in ["libiomp5.so", find_library("libiomp5md"), find_library("gomp")]:
+    libraries = (
+        "libiomp5.so",
+        find_library("libiomp5md"),
+        find_library("gomp"),
+    )
+    for l in libraries:
         if l is None:
             continue
         try:
@@ -37,15 +49,8 @@ def set_num_threads(num):
             omp.omp_set_num_threads(int(num))
             return True
 
-    logger.error("OpenMP library not found: can't set nthreads")
+    logger.warning("OpenMP library not found: can't set nthreads")
     return False
-
-
-from simsio import rc
-from simsio.simulations import Simulation
-from simsio.iocore import _get_mod_attr
-
-logger = logging.getLogger(__name__)
 
 
 def build_measures(measures, **context):
@@ -97,7 +102,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
         yield sim
         sim.dump()
         # TODO: delgate to scripts for specific extras
-        # TODO: this does not work for handles that have been previously removed from cache
+        # TODO: this does not work for handles previously removed from cache
         if not args.save_extras:
             for key in sim:
                 if not key in rc["IO-handlers"]:
