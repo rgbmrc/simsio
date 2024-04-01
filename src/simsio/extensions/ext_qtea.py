@@ -91,7 +91,8 @@ class QuantumGreenTeaSimulation(Simulation):
         for obs_class, obs_args in self._p_measures:
             if obs_class == "TNState2File":
                 # HACK: use serializer, retreive path
-                obs_args[0] = f"data/{self.uid}/output/{obs_args[0]}"
+                state_path = f"data/{self.uid}/output/{obs_args[0]}"
+                obs_args = [state_path, *obs_args[1:]]
             obs_class = getattr(qtea.observables, obs_class)
             observables += obs_class(*obs_args)
         return observables
@@ -135,11 +136,16 @@ class QuantumGreenTeaSimulation(Simulation):
         # for g in globs:
         #     dpath.get(self, g)
         seed = gen_seed(self._p_qtea_run.setdefault("seed", 0))
-        self._p_qtea_run |= {
-            # TODO: str() cause QTEA doesn't do well with pathlib.Path
-            "log_file": str(self.handles["log"].storage.absolute()),
-        }
+        # TODO: str() cause QTEA doesn't do well with pathlib.Path
+        self._p_qtea_run |= {"log_file": str(self.handles["log"].storage.absolute())}
         run_params = self._p_qtea_run | {"seed": seed, **self._p_model}
+        if ref_uid := run_params.get("continue_file"):
+            # TODO: only works for
+            # - states named "state"
+            # - unformatted (no formatted)
+            # - python (no fortran)
+            # - TTNs (no other ansatzes)
+            run_params["continue_file"] = f"data/{ref_uid}/output/state.pklttn"
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
@@ -177,6 +183,8 @@ class QuantumGreenTeaSimulation(Simulation):
                 m["entropy_val"] = list(entropy.values())
             # append to measurments dict
             for k, v in m.items():
+                # HACK: states
+                k = k.removeprefix(f"data/{self.uid}/output/")
                 measures[k].append(v)
         # unravel observables of classes listed in self.unravel_classes
         for obs_class, obs_args in self._p_measures:
