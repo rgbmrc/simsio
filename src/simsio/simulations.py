@@ -399,29 +399,34 @@ def update_config(f):
 
 
 def update_config_uid(path, old_uid, new_uid, template=None):
+    path = Path(path)
     if template is None:
         template = rc["configs"].getboolean("template")
     ref_uid = new_uid.rstrip("-R")
-    map_uid = {old_uid: ref_uid}
-    template = template and ref_uid != old_uid
+    map_uid = {old_uid: ref_uid} if template and ref_uid != old_uid else None
     with lock_config(path) as f:
         # >1e3 times faster on O(1e3) lines
         if rc["configs"].getboolean("unsafe_update"):
-            for l in fileinput.input(files=path, inplace=True):
-                # NOTE: regex? formatters (or gen_configs) remove eventual
-                # qutation marks around uuids or top level indentation
-                # but user could force them and still have valid yaml
-                if l.startswith(old_uid):
-                    l = l.replace(old_uid, new_uid, 1)  # update uid
-                if template:
-                    l = Template(l).safe_substitute(map_uid)  # template refs
-                sys.stdout.write(l)
+            old_key = re.compile(rf"^{old_uid}\s*:(?=[^\w])")
+            new_key = f"{new_uid}:"
+            try:
+                for l in fileinput.input(files=path, inplace=True, backup=".bak"):
+                    # update uid
+                    l = old_key.sub(new_key, l, 1)
+                    # template refs
+                    if map_uid:
+                        l = Template(l).safe_substitute(map_uid)
+                    sys.stdout.write(l)
+            except:
+                path.unlink()
+                path.with_suffix(path.suffix + ".bak").rename(path)
+                raise
         else:
             with update_config(f) as cfg:
                 # update uid
                 cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
                 # template refs
-                if template:
+                if map_uid:
                     for p, leaf in dpath.search(cfg, "**", yielded=True):
                         if isinstance(leaf, str) and old_uid in leaf:
                             dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
