@@ -108,7 +108,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
                 if not key in rc["IO-handlers"]:
                     sim.unlink(key)
     except:
-        logger.critical("Uncaught exception while running simulation")
+        logger.exception("Uncaught exception while running simulation")
         raise
     finally:
         sim.close()
