@@ -407,20 +407,24 @@ def update_config_uid(path, old_uid, new_uid, template=None):
     with lock_config(path) as f:
         # >1e3 times faster on O(1e3) lines
         if rc["configs"].getboolean("unsafe_update"):
+            path_bak = path.with_suffix(path.suffix + ".bak")
             old_key = re.compile(rf"^{old_uid}\s*:(?=[^\w])")
             new_key = f"{new_uid}:"
             try:
-                for l in fileinput.input(files=path, inplace=True, backup=".bak"):
-                    # update uid
-                    l = old_key.sub(new_key, l, 1)
-                    # template refs
-                    if map_uid:
-                        l = Template(l).safe_substitute(map_uid)
-                    sys.stdout.write(l)
+                with fileinput.input(files=path, inplace=True, backup=".bak") as f:
+                    for l in f:
+                        # update uid
+                        l = old_key.sub(new_key, l, 1)
+                        # template refs
+                        if map_uid:
+                            l = Template(l).safe_substitute(map_uid)
+                        sys.stdout.write(l)
             except:
                 path.unlink()
-                path.with_suffix(path.suffix + ".bak").rename(path)
+                path_bak.rename(path)
                 raise
+            else:
+                path_bak.unlink()
         else:
             with update_config(f) as cfg:
                 # update uid
