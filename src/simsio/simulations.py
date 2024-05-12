@@ -33,7 +33,7 @@ from string import Template
 from subprocess import run
 
 import dictdiffer
-import dpath.util as dpath
+import dpath
 import numpy as np
 import ruamel.yaml as yaml
 
