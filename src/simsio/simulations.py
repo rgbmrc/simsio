@@ -244,6 +244,7 @@ def _get_params_vals(sims, keys):
     except AttributeError:
         sims = ((s,) for s in sims)
     pars = (get_sim(*sim).par for sim in sims)
+    keys = list(keys)  # copy
     for i, k in enumerate(keys):
         if isinstance(k, str):
             keys[i] = (k, dpath._DEFAULT_SENTINEL)
