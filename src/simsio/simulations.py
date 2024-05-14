@@ -249,7 +249,7 @@ def _get_params_vals(sims, keys):
         if isinstance(k, str):
             keys[i] = (k, dpath._DEFAULT_SENTINEL)
     vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
-    return tuple(zip(*vals))
+    return tuple(zip(*vals)), keys
 
 
 def uids_sort(sims, keys, return_vals=False):
@@ -270,7 +270,7 @@ def uids_sort(sims, keys, return_vals=False):
         [description]
     """
     sims = list(sims)
-    vals = _get_params_vals(sims, keys)
+    vals, keys = _get_params_vals(sims, keys)
     idxs = np.lexsort(vals[::-1])
     sims = [sims[i] for i in idxs]
     if return_vals:
@@ -282,7 +282,7 @@ def uids_sort(sims, keys, return_vals=False):
 
 def uids_grid(sims, keys):
     # TODO: aliases for paths
-    vals = _get_params_vals(sims, keys)
+    vals, keys = _get_params_vals(sims, keys)
     idxs = np.empty((len(keys), len(sims)), dtype=np.intp)
     uniq = {}
     for j, ((k, d), v) in enumerate(zip(keys, vals)):
