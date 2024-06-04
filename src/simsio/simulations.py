@@ -212,8 +212,8 @@ def gen_configs(template, params, glob=None):
             pass
         else:
             params = [dict(zip(keys, vs)) for vs in product(*vals)]
-        for enum, ps in enumerate(params):
-            yml = template.substitute(ps, enum=str(enum))
+        for prev, ps in enumerate(params):
+            yml = template.substitute(ps, enum=prev + 1, prev=prev)
             c = yamlrt.load(yml)
             configs |= c
             uids |= set(c)
