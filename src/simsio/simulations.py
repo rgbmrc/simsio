@@ -76,7 +76,7 @@ def _valid_uuid(uid=None, raise_invalid=False):
             raise ValueError from e
         else:
             uid = uuid.uuid1()
-    return str(uid).replace("-", "")
+    return str(uid).replace("~", "")
 
 
 UID_DTYPE = np.array(_valid_uuid()).dtype
@@ -445,7 +445,7 @@ class Simulation(Cache):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
 
-        self.uid = uid.rsplit("-", 1)[0] if readonly else _valid_uuid(uid)
+        self.uid = uid.rsplit("~", 1)[0] if readonly else _valid_uuid(uid)
         self._save_time = None
         self._cpu_clock = time.process_time()
         self.cfg_path = None
