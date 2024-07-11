@@ -403,7 +403,7 @@ def update_config_uid(path, old_uid, new_uid, template=None):
     path = Path(path)
     if template is None:
         template = rc["configs"].getboolean("template")
-    ref_uid = new_uid.rstrip("-R")
+    ref_uid = new_uid.rstrip("~R")
     map_uid = {old_uid: ref_uid} if template and ref_uid != old_uid else None
     with lock_config(path) as f:
         # >1e3 times faster on O(1e3) lines
@@ -454,7 +454,7 @@ class Simulation(Cache):
         # before writing/linking anything get config
         if not readonly:
             self.cfg_path, cfg = load_config(uid, group)
-            update_config_uid(self.cfg_path, uid, f"{self.uid}-R", template)
+            update_config_uid(self.cfg_path, uid, f"{self.uid}~R", template)
 
         for key in rc["IO-handlers"]:
             if key != "dat":
@@ -497,7 +497,7 @@ class Simulation(Cache):
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            update_config_uid(self.cfg_path, f"{self.uid}-R", self.uid)
+            update_config_uid(self.cfg_path, f"{self.uid}~R", self.uid)
 
     def __repr__(self):
         cls = self.__class__.__name__
