@@ -76,7 +76,7 @@ def _valid_uuid(uid=None, raise_invalid=False):
             raise ValueError from e
         else:
             uid = uuid.uuid1()
-    return str(uid).replace("~", "")
+    return str(uid).replace("-", "")
 
 
 UID_DTYPE = np.array(_valid_uuid()).dtype
