@@ -421,7 +421,7 @@ def update_config_uid(path, old_uid, new_uid, template=None):
                             l = Template(l).safe_substitute(map_uid)
                         sys.stdout.write(l)
             except:
-                path.unlink()
+                path.unlink(missing_ok=True)
                 path_bak.rename(path)
                 raise
             else:
