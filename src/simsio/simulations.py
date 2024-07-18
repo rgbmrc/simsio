@@ -15,7 +15,6 @@
 """
 
 import fcntl
-import fileinput
 import logging
 import logging.config
 import re
@@ -408,24 +407,22 @@ def update_config_uid(path, old_uid, new_uid, template=None):
     with lock_config(path) as f:
         # >1e3 times faster on O(1e3) lines
         if rc["configs"].getboolean("unsafe_update"):
-            path_bak = path.with_suffix(path.suffix + ".bak")
-            old_key = re.compile(rf"^{old_uid}\s*:(?=[^\w])")
-            new_key = f"{new_uid}:"
-            try:
-                with fileinput.input(files=path, inplace=True, backup=".bak") as f:
-                    for l in f:
-                        # update uid
-                        l = old_key.sub(new_key, l, 1)
-                        # template refs
-                        if map_uid:
-                            l = Template(l).safe_substitute(map_uid)
-                        sys.stdout.write(l)
-            except:
-                path.unlink(missing_ok=True)
-                path_bak.rename(path)
-                raise
-            else:
-                path_bak.unlink()
+            old_key = re.compile(rf"^{old_uid}(?=:[^\w])")
+            # tempfile.SpooledTemporaryFile for large configs? no point
+            # because must still fit in memory when loaded as yaml
+            cfg = f.readlines()
+            for i, l in enumerate(cfg):
+                # update uid
+                l = old_key.sub(new_uid, l, 1)
+                # template refs
+                if map_uid:
+                    l = Template(l).safe_substitute(map_uid)
+                cfg[i] = l
+            # copy only once update has been successfully completed
+            # (no shutil.copyfile as it voids the lock on f)
+            f.seek(0)
+            f.writelines(cfg)
+            f.truncate()
         else:
             with update_config(f) as cfg:
                 # update uid
