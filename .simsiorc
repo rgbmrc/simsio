@@ -10,7 +10,6 @@ header_tag = ===
 header_ref = <<<
 template = true
 unsafe_update = true
-lock_attempts = 100
 
 [versioning]
 git_revision = git rev-parse HEAD

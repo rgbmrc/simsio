@@ -83,7 +83,6 @@ UID_REGEX = "[a-z0-9]{32}"
 
 CFG_EXT = ".yaml"
 CFG_DIR = Path(rc["configs"]["directory"])
-CFG_LOCK_ATTEMPT_FREQ = 1
 RESERVED_KEYS = {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}
 
 # TODO: use file cache for _config_path_history
@@ -374,19 +373,10 @@ def load_config(uid, group=None, expand=True):
 @contextmanager
 def lock_config(path):
     with open(path, "r+") as f:
-        for _ in range(rc["configs"].getint("lock_attempts")):
-            try:
-                logger.debug(f"Attempting to acquire lock on {path}")
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as e:
-                error = e
-                time.sleep(1.0 / CFG_LOCK_ATTEMPT_FREQ)
-                continue
-            else:
-                yield f
-                break
-        else:
-            raise error
+        fcntl.lockf(f, fcntl.LOCK_EX)
+        logger.debug("Locked config %s", path)
+        yield f
+        fcntl.lockf(f, fcntl.LOCK_UN)  # probably superflous
 
 
 @contextmanager
