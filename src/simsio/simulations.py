@@ -484,7 +484,7 @@ class Simulation(Cache):
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            update_config_uid(self.cfg_path, f"{self.uid}-R", self.uid)
+            update_config_uid(self.cfg_path, f"{self.uid}-R", self.uid, template=False)
 
     def __repr__(self):
         cls = self.__class__.__name__
