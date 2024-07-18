@@ -8,7 +8,7 @@ res = out/$uid, w, simsio.serializers.NPZSerializer
 directory = configs
 header_tag = ===
 header_ref = <<<
-template = true
+template = false
 unsafe_update = true
 
 [versioning]
