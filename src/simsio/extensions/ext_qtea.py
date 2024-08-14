@@ -38,7 +38,7 @@ def gen_seed(seed=None):
 
 def extract_sweep_time_energy(uid):
     try:
-        uid = uid.strip("-R")
+        uid = uid.strip("~R")
         # HACK: retreive path
         cnv_file = f"data/{uid}/output/convergence.log"
         # if empty data unpacking fails with ValueError
