@@ -1,3 +1,4 @@
+from copy import copy
 from functools import cache
 import logging
 from collections import UserDict, namedtuple
@@ -94,6 +95,11 @@ class Cache(UserDict, IOHandler):
         if not key in self.handles:
             raise KeyError(f"Cannot set unlinked IO handle {key}")
         super().__setitem__(key, val)
+
+    def __copy__(self):
+        new = super().__copy__()
+        new.data = {k: copy(v) for k, v in self.data.items()}
+        return new
 
     def load(self, key, cache=True):
         d = super().load(key)

@@ -89,6 +89,23 @@ RESERVED_KEYS = {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}
 HISTORY_FILE = ".simsio_history"
 _config_path_history = deque(maxlen=100)
 
+sim_registry = {}
+
+
+def purge_registry(sims=None):
+    if sims:
+        for s in sims:
+            if isinstance(s, Simulation):
+                s = s.uid
+            sim_registry.pop(s, None)
+    else:
+        sim_registry.clear()
+
+
+def purge_caches(keys=None):
+    for s in sim_registry.values():
+        s.purge_cache(keys)
+
 
 def sim_or_uid_arg(fun_sim):
     @wraps(fun_sim)
@@ -221,7 +238,7 @@ def gen_configs(template, params, glob=None):
 
 def get_sim(sim_or_uid, group=None):
     """
-    Retreives a simulation from the cache, building it if not already present.
+    Retreives a simulation from the register, building it if not already present.
 
     The eventual Simulation initialization uses default arguments
     (except for group, if provided).
@@ -230,10 +247,10 @@ def get_sim(sim_or_uid, group=None):
         return None
     if isinstance(sim_or_uid, Simulation):
         return sim_or_uid
-    if sim_or_uid not in Simulation.cache:
-        Simulation.cache[sim_or_uid] = Simulation(sim_or_uid, group)
+    if sim_or_uid not in sim_registry:
+        sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
         logger.debug(f"Cached simulation {sim_or_uid}")
-    return Simulation.cache[sim_or_uid]
+    return sim_registry[sim_or_uid]
 
 
 def _get_params_vals(sims, keys):
@@ -426,8 +443,6 @@ def update_config_uid(path, old_uid, new_uid, template=None):
 
 class Simulation(Cache):
 
-    cache = {}
-
     def __init__(self, uid, group=None, readonly=True, template=None):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
@@ -435,6 +450,7 @@ class Simulation(Cache):
         self.uid = uid.rsplit("~", 1)[0] if readonly else _valid_uuid(uid)
         self._save_time = None
         self._cpu_clock = time.process_time()
+        self.cache = {}
         self.cfg_path = None
         cfg = {}
 
@@ -496,6 +512,27 @@ class Simulation(Cache):
             return self[name]
         else:
             return super().__getattribute__(name)
+
+    def __copy__(self):
+        new = super().__copy__()
+        new.uid = _valid_uuid()
+        new.cache = {}
+        return new
+
+    def copy(self, register=False):
+        # enforce consistent copy() and __copy__()
+        # UserDict built in implementations differ
+        new = self.__copy__()
+        if register:
+            sim_registry[new.uid] = new
+        return new
+
+    def purge_cache(self, keys=None):
+        if keys:
+            for k in keys:
+                self.cache.pop(k, None)
+        else:
+            self.cache.clear()
 
     def runtime_info(self, ext_cpu_time=0.0):
         """Integrates simulation params with runtime info and returns it."""
