@@ -89,7 +89,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
         sim_class = _get_mod_attr(sim_class)
     sim_kwargs.setdefault("readonly", False)
     try:
-        sim = sim_class(args.uid, args.group, **sim_kwargs)
+        sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
     except KeyError as e:  # TODO: custom exception, missing config file or uid?
         if not_found_ok:
             logger.error(e.args[0])

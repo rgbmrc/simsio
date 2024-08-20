@@ -450,21 +450,18 @@ def update_config_uid(path, old_uid, new_uid, template=None):
 
 class Simulation(Cache):
 
-    def __init__(self, uid, group=None, readonly=True, template=None):
+    def __init__(self, uid=None, cfg=None, readonly=True):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
-
-        self.uid = uid.rsplit("~", 1)[0] if readonly else _valid_uuid(uid)
+        if uid and readonly:
+            self.uid = uid.rsplit("~", 1)[0]
+        else:
+            self.uid = _valid_uuid(uid)
+        cfg = cfg or {}
+        self.cfg_path = None
         self._save_time = None
         self._cpu_clock = time.process_time()
         self.cache = {}
-        self.cfg_path = None
-        cfg = {}
-
-        # before writing/linking anything get config
-        if not readonly:
-            self.cfg_path, cfg = load_config(uid, group)
-            update_config_uid(self.cfg_path, uid, f"{self.uid}~R", template)
 
         for key in rc["IO-handlers"]:
             if key != "dat":
@@ -479,11 +476,11 @@ class Simulation(Cache):
         try:
             par = self.load("par")
         except FileNotFoundError:
-            par = None
+            par = {}
             if not readonly:
                 raise
         if readonly and not par:
-            _, self["par"] = load_config(uid, group)
+            self["par"] = cfg
 
         # merge config & runtime info into params
         if not readonly:
@@ -498,21 +495,29 @@ class Simulation(Cache):
             }
 
             # update params
-            diff = dictdiffer.diff(self["par"], cfg, expand=True)
+            diff = dictdiffer.diff(par, cfg, expand=True)
             diff = [d for d in diff if not "remove" in d]
             if diff:
-                dictdiffer.patch(diff, self["par"], in_place=True)
+                dictdiffer.patch(diff, par, in_place=True)
                 msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
                 logger.warning("Config changes\n%s\n%s", msg, "=" * 80)
+
+    @classmethod
+    def from_config(cls, uid, group=None, template=None):
+        # before writing/linking anything get config
+        cfg_path, cfg = load_config(uid, group)
+        sim = cls(uid, cfg, readonly=False)
+        sim.cfg_path = cfg_path
+        update_config_uid(cfg_path, uid, f"{sim.uid}~R", template)
+        return sim
 
     def close(self):
         if not self.readonly and self.cfg_path:
             update_config_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
 
     def __repr__(self):
-        cls = self.__class__.__name__
         args = f"{self.uid!r}, readonly={self.readonly!r}"
-        return f"{cls}({args}){set(self)}"
+        return f"{type(self).__name__}({args}){set(self)}"
 
     def __getattribute__(self, name):
         if name in rc["IO-handlers"]:
