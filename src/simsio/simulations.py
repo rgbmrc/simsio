@@ -93,8 +93,8 @@ sim_registry = {}
 
 
 def purge_registry(sims=None):
-    if sims:
-        for s in sims:
+    if sims is not None:
+        for s in np.ravel(sims):
             if isinstance(s, Simulation):
                 s = s.uid
             sim_registry.pop(s, None)
