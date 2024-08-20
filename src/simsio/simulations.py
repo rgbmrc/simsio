@@ -535,7 +535,7 @@ class Simulation(Cache):
         return new
 
     def purge_cache(self, keys=None):
-        if keys:
+        if keys is not None:
             for k in keys:
                 self.cache.pop(k, None)
         else:
