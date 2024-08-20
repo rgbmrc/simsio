@@ -207,10 +207,15 @@ class SimsQuery:
     def uids(self):
         return {u: g for g, us in self.groups.items() for u in us}
 
+    def __iter__(self):
+        return iter(self.uids)
+
+    def __len__(self):
+        return len(self.uids)
+
     def __repr__(self):
-        cls = self.__class__.__name__
         args = f"group_glob={self.group_glob!r}, uid_regex={self.uid_regex!r}"
-        return f"{cls}({args})"
+        return f"{type(self).__name__}({args})"
 
 
 def gen_configs(template, params, glob=None):
