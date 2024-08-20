@@ -79,11 +79,12 @@ def _valid_uuid(uid=None, raise_invalid=False):
 
 
 UID_DTYPE = np.array(_valid_uuid()).dtype
-UID_REGEX = "[a-z0-9]{32}"
-
 CFG_EXT = ".yaml"
-CFG_DIR = Path(rc["configs"]["directory"])
-RESERVED_KEYS = {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}
+
+
+def get_cfg_dir():
+    return Path(rc["configs"]["directory"])
+
 
 # TODO: use file cache for _config_path_history
 HISTORY_FILE = ".simsio_history"
@@ -148,7 +149,7 @@ def glob_groups(pattern=None, cron=False):
         Paths of matching config files, ordered chronologically, from the most recently used process
     """
     pattern = (pattern or "**/*") + CFG_EXT
-    paths = CFG_DIR.glob(pattern)
+    paths = get_cfg_dir().glob(pattern)
     if cron:
         paths = set(paths)
         paths = chain(
@@ -159,11 +160,11 @@ def glob_groups(pattern=None, cron=False):
 
 
 def path_to_group(p):
-    return str(p.relative_to(CFG_DIR).with_suffix(""))
+    return str(p.relative_to(get_cfg_dir()).with_suffix(""))
 
 
 def group_to_path(g):
-    return Path(CFG_DIR, g).with_suffix(CFG_EXT)
+    return Path(get_cfg_dir(), g).with_suffix(CFG_EXT)
 
 
 class SimsQuery:
@@ -355,7 +356,7 @@ def _expand(config, templates):
 
 
 def load_config(uid, group=None, expand=True):
-    if uid in RESERVED_KEYS:
+    if uid in {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}:
         raise KeyError(f"Key {uid} is reserved")
     for path in glob_groups(group):
         cfgs = yamlsf.load(path)
