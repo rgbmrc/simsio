@@ -158,26 +158,6 @@ def glob_groups(pattern=None, cron=False):
     return paths
 
 
-def get_uids(glob=None):
-    """
-    DEPRECATED, use sims_query.
-
-    Returns uids contained in config files matching a glob.
-
-    Parameters
-    ----------
-    group : str, optional
-        Glob pattern the config filename should match, by default '*'
-
-    Returns
-    -------
-    set[str]
-        uids in matching configs.
-    """
-    root = (set(yamlsf.load(p)) for p in glob_groups(glob))
-    return set.union(*root) - {rc["configs"]["header_tag"]}
-
-
 def path_to_group(p):
     return str(p.relative_to(CFG_DIR).with_suffix(""))
 
@@ -187,21 +167,20 @@ def group_to_path(g):
 
 
 class SimsQuery:
-    def __init__(self, group_glob=None, uid_regex=UID_REGEX):
+    def __init__(self, group_glob=None, uid_regex=None):
         self.group_glob = group_glob
-        self.uid_regex = uid_regex
+        # hardcoded default for backward compatibility with old .simsiorc files
+        # TODO remove when default rc file is deployed
+        self.uid_regex = uid_regex or rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
 
         tag = rc["configs"]["header_tag"]
-        if not uid_regex:
-            uid_filter = lambda u: u != tag
-        else:
-            uid_regex = re.compile(uid_regex, re.S)
-            uid_filter = lambda u: u != tag and uid_regex.fullmatch(u)
+        uid_filter = re.compile(self.uid_regex, re.S).fullmatch
 
         self.groups = {
-            path_to_group(p): {u for u in yamlsf.load(p) if uid_filter(u)}
+            path_to_group(p): {u for u in cfg if uid_filter(u)} - {tag}
             for p in glob_groups(group_glob)
-        }  # yapf: disable
+            if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
+        }
 
     @cached_property
     def uids(self):

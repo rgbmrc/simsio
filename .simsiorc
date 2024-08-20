@@ -8,6 +8,7 @@ res = out/$uid, w, simsio.serializers.NPZSerializer
 directory = configs
 header_tag = ===
 header_ref = <<<
+uuid_regex = [a-z0-9]{32}
 template = false
 unsafe_update = true
 
