@@ -248,10 +248,12 @@ def get_sim(sim_or_uid, group=None):
     The eventual Simulation initialization uses default arguments
     (except for group, if provided).
     """
-    if not sim_or_uid:
-        return None
     if isinstance(sim_or_uid, Simulation):
         return sim_or_uid
+    if not isinstance(sim_or_uid, str):
+        raise TypeError(f"Expected str uid, got {type(sim_or_uid).__name__}")
+    if not sim_or_uid:
+        return None
     if sim_or_uid not in sim_registry:
         sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
         logger.debug(f"Cached simulation {sim_or_uid}")
