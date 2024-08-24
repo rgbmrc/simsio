@@ -36,7 +36,7 @@ import dpath
 import numpy as np
 import ruamel.yaml as yaml
 
-from simsio import rc
+from simsio.config import rc
 from simsio.iocore import Cache
 
 logger = logging.getLogger(__name__)
