@@ -168,18 +168,19 @@ def group_to_path(g):
 
 
 class SimsQuery:
-    def __init__(self, group_glob=None, uid_regex=None):
-        self.group_glob = group_glob
-        # hardcoded default for backward compatibility with old .simsiorc files
-        # TODO remove when default rc file is deployed
-        self.uid_regex = uid_regex or rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
-
-        tag = rc["configs"]["header_tag"]
-        uid_filter = re.compile(self.uid_regex, re.S).fullmatch
-
+    def __init__(self, *group_globs, valid_uuid=True):
+        self.group_glob = group_globs
+        if valid_uuid:
+            # hardcoded default for backward compatibility with old .simsiorc files
+            # TODO remove when default rc file is deployed
+            uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
+            uid_filter = re.compile(uuid_regex, re.S).fullmatch
+        else:
+            uid_filter = rc["configs"]["header_tag"].__ne__
         self.groups = {
-            path_to_group(p): {u for u in cfg if uid_filter(u)} - {tag}
-            for p in glob_groups(group_glob)
+            path_to_group(p): set(filter(uid_filter, cfg))
+            for gg in group_globs
+            for p in glob_groups(gg)
             if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
         }
 
