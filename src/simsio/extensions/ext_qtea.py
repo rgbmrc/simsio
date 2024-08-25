@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from collections import ChainMap, defaultdict
 from inspect import signature
 from itertools import chain
@@ -12,7 +13,7 @@ from qtealeaves import map_selector
 from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
 
-from simsio.simulations import Simulation
+from simsio.simulations import Simulation, UID_REGEX
 
 logger = logging.getLogger(__name__)
 
@@ -140,12 +141,13 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_qtea_run |= {"log_file": str(self.handles["log"].storage.absolute())}
         run_params = self._p_qtea_run | {"seed": seed, **self._p_model}
         if ref_uid := run_params.get("continue_file"):
-            # TODO: only works for
-            # - states named "state"
-            # - unformatted (no formatted)
-            # - python (no fortran)
-            # - TTNs (no other ansatzes)
-            run_params["continue_file"] = f"data/{ref_uid}/output/state.pklttn"
+            if re.fullmatch(UID_REGEX, ref_uid):
+                # TODO: only works for
+                # - states named "state"
+                # - unformatted (no formatted)
+                # - python (no fortran)
+                # - TTNs (no other ansatzes)
+                run_params["continue_file"] = f"data/{ref_uid}/output/state.pklttn"
         # we always run a single thread
         self.qtea_sim.run(run_params, delete_existing_folder=overwrite)
 
