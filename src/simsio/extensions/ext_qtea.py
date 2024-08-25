@@ -4,6 +4,7 @@ import re
 from collections import ChainMap, defaultdict
 from inspect import signature
 from itertools import chain
+from math import prod, log2
 from pathlib import Path
 
 import dpath
@@ -49,10 +50,20 @@ def extract_sweep_time_energy(uid):
         return np.zeros((2, 0))
 
 
-def unravel(obs1d, lvals, *, ndim=0, map_type="HilbertCurveMap", argmap=None):
+def get_map(lvals, init=True):
+    map_ = "SnakeMap" if log2(prod(lvals)) % 1 else "HilbertCurveMap"
+    if init:
+        map_ = map_selector(len(lvals), lvals, map_)
+    return map_
+
+
+def get_inverse_map(map_):
+    return np.lexsort(tuple(zip(*map(reversed, map_))))
+
+
+def unravel(obs1d, lvals, *, ndim=0, argmap=None):
     if argmap is None:
-        posmap = map_selector(len(lvals), lvals, map_type)
-        argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
+        argmap = get_inverse_map(get_map(lvals, init=True))
     if not ndim > 0:
         ndim = np.ndim(obs1d) + ndim
     if ndim == 0:  # scalar
@@ -119,7 +130,7 @@ class QuantumGreenTeaSimulation(Simulation):
 
         # TODO: support parameterized lvals
         posmap = map_selector(model.dim, model.lvals, model.map_type)
-        argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
+        argmap = get_inverse_map(posmap)
         self._unravel_args = dict(argmap=argmap, lvals=model.lvals)
 
         # HACK: TODO: test
