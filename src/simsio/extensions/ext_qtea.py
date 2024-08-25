@@ -107,6 +107,8 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_qtea_sim["folder_name_input"] = f"data/{self.uid}/input/"
         self._p_qtea_sim["folder_name_output"] = f"data/{self.uid}/output/"
         self._p_qtea_sim["has_log_file"] = False  # logging handled by simsio
+        # TODO: newer qtealeaves versions will neede the following
+        # self._p_qtea_sim["py_tensor_backend"] = TensorBackend(dtype=float)
         self.qtea_sim = QTEASimulation(
             model=model,
             operators=operators,
