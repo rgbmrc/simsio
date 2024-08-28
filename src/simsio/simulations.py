@@ -169,8 +169,9 @@ def group_to_path(g):
 
 class SimsQuery:
     def __init__(self, *group_globs, valid_uuid=True):
-        self.group_glob = group_globs
-        if valid_uuid:
+        self.group_globs = group_globs or ["**/*"]
+        self.valid_uuid = valid_uuid
+        if self.valid_uuid:
             # hardcoded default for backward compatibility with old .simsiorc files
             # TODO remove when default rc file is deployed
             uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
@@ -179,8 +180,8 @@ class SimsQuery:
             uid_filter = rc["configs"]["header_tag"].__ne__
         self.groups = {
             path_to_group(p): set(filter(uid_filter, cfg))
-            for gg in group_globs
-            for p in glob_groups(gg)
+            for glob in self.group_globs
+            for p in glob_groups(glob)
             if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
         }
 
@@ -195,7 +196,7 @@ class SimsQuery:
         return len(self.uids)
 
     def __repr__(self):
-        args = f"group_glob={self.group_glob!r}, uid_regex={self.uid_regex!r}"
+        args = f"group_globs={self.group_globs}, valid_uuid={self.valid_uuid}"
         return f"{type(self).__name__}({args})"
 
 
