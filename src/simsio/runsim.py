@@ -11,7 +11,7 @@ from ctypes.util import find_library
 import numpy as np
 
 from simsio import rc
-from simsio.iocore import _get_mod_attr
+from simsio.utils import get_module_attr
 from simsio.simulations import Simulation
 
 __all__ = ["argparse", "run_sim"]
@@ -86,7 +86,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     args = parser.parse_args(args=sys.argv[1:delim])
     set_num_threads(args.ncores)
     if isinstance(sim_class, str):
-        sim_class = _get_mod_attr(sim_class)
+        sim_class = get_module_attr(sim_class)
     sim_kwargs.setdefault("readonly", False)
     try:
         sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)

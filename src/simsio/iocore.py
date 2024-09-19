@@ -5,14 +5,11 @@ from collections import UserDict, namedtuple
 from importlib import import_module
 from pathlib import Path
 
+from .utils import get_module_attr
+
 logger = logging.getLogger(__name__)
 
 IOInfo = namedtuple("IOInfo", ("storage", "write_mode", "serializer"))
-
-
-def _get_mod_attr(name):
-    mod, attr = name.rsplit(".", 1)
-    return getattr(import_module(mod), attr)
 
 
 class IOHandler:
@@ -31,7 +28,7 @@ class IOHandler:
     def link(self, key, path, write_mode, serializer):
 
         if isinstance(serializer, str):
-            serializer = _get_mod_attr(serializer)()
+            serializer = get_module_attr(serializer)()
 
         path = Path(path).with_suffix(serializer.ext)
         if not self.readonly:
