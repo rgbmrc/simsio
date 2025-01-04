@@ -13,6 +13,7 @@ import qtealeaves as qtea
 from qtealeaves import map_selector
 from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
+from qredtea.torchapi.qteatorchtensor import default_pytorch_backend
 
 from simsio.simulations import Simulation, UID_REGEX
 
@@ -118,6 +119,8 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_qtea_sim["folder_name_input"] = f"data/{self.uid}/input/"
         self._p_qtea_sim["folder_name_output"] = f"data/{self.uid}/output/"
         self._p_qtea_sim["has_log_file"] = False  # logging handled by simsio
+        self._p_qtea_sim["py_tensor_backend"] = default_pytorch_backend()
+        # logging handled by simsio
         # TODO: newer qtealeaves versions will neede the following
         # self._p_qtea_sim["py_tensor_backend"] = TensorBackend(dtype=float)
         self.qtea_sim = QTEASimulation(
