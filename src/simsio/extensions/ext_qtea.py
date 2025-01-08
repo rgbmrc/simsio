@@ -13,6 +13,7 @@ import qtealeaves as qtea
 from qtealeaves import map_selector
 from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
+from qtealeaves.tensors import TensorBackend
 from qredtea.torchapi.qteatorchtensor import default_pytorch_backend
 
 from simsio.simulations import Simulation, UID_REGEX
@@ -119,16 +120,22 @@ class QuantumGreenTeaSimulation(Simulation):
         self._p_qtea_sim["folder_name_input"] = f"data/{self.uid}/input/"
         self._p_qtea_sim["folder_name_output"] = f"data/{self.uid}/output/"
         self._p_qtea_sim["has_log_file"] = False  # logging handled by simsio
-        self._p_qtea_sim["py_tensor_backend"] = default_pytorch_backend()
+        self._p_qtea_sim.pop("tensor_backend", None)
+        self._p_qtea_sim.pop("py_tensor_backend", None)
+        backend = default_pytorch_backend()
+        # backend = TensorBackend()
+        not_serializable = {
+            # "tensor_backend": backend,
+            "tensor_backend": 2,
+            "py_tensor_backend": backend,
+        }
         # logging handled by simsio
-        # TODO: newer qtealeaves versions will neede the following
-        # self._p_qtea_sim["py_tensor_backend"] = TensorBackend(dtype=float)
         self.qtea_sim = QTEASimulation(
             model=model,
             operators=operators,
             convergence=self._init_convergence(),
             observables=self._init_observables(),
-            **self._p_qtea_sim,
+            **self._p_qtea_sim | not_serializable,
         )
 
         # TODO: support parameterized lvals
