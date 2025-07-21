@@ -168,7 +168,7 @@ def group_to_path(g):
 
 
 class SimsQuery:
-    def __init__(self, *group_globs, valid_uuid=True):
+    def __init__(self, *group_globs, valid_uuid=True, select=None):
         self.group_globs = group_globs or ["**/*"]
         self.valid_uuid = valid_uuid
         if self.valid_uuid:
@@ -184,6 +184,8 @@ class SimsQuery:
             for p in glob_groups(glob)
             if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
         }
+        if select is not None:
+            self.groups = {k: set(filter(select, us)) for k, us in self.groups.items()}
 
     @cached_property
     def uids(self):
@@ -247,35 +249,31 @@ def _get_params_vals(sims, keys):
         sims = sims.items()
     except AttributeError:
         sims = ((s,) for s in sims)
-    pars = (get_sim(*sim).par for sim in sims)
-    keys = list(keys)  # copy
-    for i, k in enumerate(keys):
-        if isinstance(k, str):
-            keys[i] = (k, dpath._DEFAULT_SENTINEL)
-    vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
-    return tuple(zip(*vals)), keys
+    sims = (get_sim(*sim) for sim in sims)
+    keys = [Measure.get(k) for k in keys]
+    vals = [[k(sim) for k in keys] for sim in sims]
+    return keys, tuple(zip(*vals))
 
 
+def sims_or_group_arg(func_sims):
+    @wraps(func_sims)
+    def func_sims_or_group(sims_or_group, *args, **kwargs):
+        if isinstance(sims_or_group, str):
+            sims_or_group = SimsQuery(sims_or_group)
+        return func_sims(sims_or_group, *args, **kwargs)
+
+    return func_sims_or_group
+
+
+@sims_or_group_arg
 def uids_sort(sims, keys, return_vals=False):
     """
     Sorts a set of uids in lexicographic order according to the values of the given
     parmeters.
-
-    Parameters
-    ----------
-    uids : [type]
-        [description]
-    keys : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
     """
-    sims = list(sims)
-    vals, keys = _get_params_vals(sims, keys)
+    keys, vals = _get_params_vals(sims, keys)
     idxs = np.lexsort(vals[::-1])
+    sims = list(sims)  # need __getitem__
     sims = [sims[i] for i in idxs]
     if return_vals:
         vals = tuple(zip(*vals))
@@ -284,20 +282,24 @@ def uids_sort(sims, keys, return_vals=False):
     return sims
 
 
-def uids_grid(sims, keys):
-    # TODO: aliases for paths
-    vals, keys = _get_params_vals(sims, keys)
+@sims_or_group_arg
+def uids_grid(sims, keys) -> tuple[np.ndarray, dict[Measure, np.ndarray]]:
+    # NOTE why returning array of strings and not Simulation objects?
+    # among other reasons:
+    # https://github.com/numpy/numpy/issues/27212#issue-2465378354
+    keys, vals = _get_params_vals(sims, keys)
     idxs = np.empty((len(keys), len(sims)), dtype=np.intp)
     uniq = {}
-    for j, ((k, d), v) in enumerate(zip(keys, vals)):
+    for j, (k, v) in enumerate(zip(keys, vals)):
         u, i = np.unique(v, return_inverse=True)
         uniq[k] = u
         idxs[j] = i
-    idxs = idxs.T
-    grid = np.empty([len(u) for u in uniq.values()], dtype=UID_DTYPE)
-    # grid = np.ma.masked_all([len(u) for u in uniq.values()], dtype=UID_DTYPE, fill_value='')
-    for i, s in zip(idxs, sims):
+    shape = tuple(map(len, uniq.values()))
+    grid = np.ma.masked_all(shape, dtype=UID_DTYPE)
+    for i, s in zip(idxs.T, sims):
         grid[tuple(i)] = getattr(s, "uid", s)
+    if not grid.mask.any():
+        grid = grid.data
     return grid, uniq
 
 
