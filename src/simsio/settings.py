@@ -19,7 +19,7 @@ def rc_context(filenames, reset: None | bool = None):
         # in case there are keys that would not get overwritten
         if reset != False:  # True or None
             rc.clear()
-        if reset == None:
+        if reset is None:
             rc.read(RC_FILE)
         rc.read(filenames)
         yield
