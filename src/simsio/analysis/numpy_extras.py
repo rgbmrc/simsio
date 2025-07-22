@@ -46,5 +46,16 @@ def tilepad(a, shape):
     return np.pad(a, dshape.T, mode="wrap")
 
 
+def fftsymshift(dat, axis=None):
+    dat = np.fft.fftshift(dat, axes=axis)
+    if axis is None:
+        axis = range(dat.ndim)
+    pad = np.zeros((dat.ndim, 2), int)
+    pad[list(axis), 1] = 1  # natively supports negative axis indices
+    pad &= (np.expand_dims(dat.shape, 1) + 1) % 2
+    dat = np.pad(dat, pad_width=pad, mode="wrap")
+    return dat
+
+
 def coords_to_slices(r):
     return [slice(c, c + 1) if c != -1 else slice(c, None) for c in r]

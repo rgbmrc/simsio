@@ -3,6 +3,7 @@ import logging
 import re
 from collections import defaultdict, deque
 from contextlib import contextmanager
+from functools import cached_property, wraps
 from itertools import chain, product
 from pathlib import Path
 from shutil import rmtree
@@ -14,6 +15,18 @@ import ruamel.yaml as yaml
 from simsio.settings import rc
 
 # from simsio.analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
+
+__all__ = [
+    "SimsQuery",
+    "sims_or_group_arg",
+    "cfg_glob",
+    "path_to_group",
+    "group_to_path",
+    "cfg_lock",
+    "cfg_update",
+    "cfg_update",
+    "cfg_gen",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +47,7 @@ HISTORY_FILE = ".simsio_history"
 _config_path_history = deque(maxlen=100)
 
 
-def glob_groups(pattern=None, cron=False):
+def cfg_glob(pattern=None, cron=False):
     """
     Returns the paths of config files matching a glob.
 
@@ -94,10 +107,10 @@ def _expand(config, templates):
             _expand(v, templates)
 
 
-def load_config(uid, group=None, expand=True):
+def cfg_load(uid, group=None, expand=True):
     if uid in {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}:
         raise KeyError(f"Key {uid} is reserved")
-    for path in glob_groups(group):
+    for path in cfg_glob(group):
         cfgs = yamlsf.load(path)
         if cfgs and (cfg := cfgs.get(uid)):
             while path in _config_path_history:
@@ -114,7 +127,7 @@ def load_config(uid, group=None, expand=True):
 
 
 @contextmanager
-def lock_config(path):
+def cfg_lock(path):
     with open(path, "r+") as f:
         fcntl.lockf(f, fcntl.LOCK_EX)
         logger.debug("Locked config %s", path)
@@ -123,7 +136,7 @@ def lock_config(path):
 
 
 @contextmanager
-def update_config(f):
+def cfg_update(f):
     cfgs = yamlrt.load(f)
     yield cfgs
     f.seek(0)
@@ -131,13 +144,13 @@ def update_config(f):
     f.truncate()
 
 
-def update_config_uid(path, old_uid, new_uid, template=None):
+def cfg_update_uid(path, old_uid, new_uid, template=None):
     path = Path(path)
     if template is None:
         template = rc["configs"].getboolean("template")
     ref_uid = new_uid.rstrip("~R")
     map_uid = {old_uid: ref_uid} if template and ref_uid != old_uid else None
-    with lock_config(path) as f:
+    with cfg_lock(path) as f:
         # >1e3 times faster on O(1e3) lines
         if rc["configs"].getboolean("unsafe_update"):
             old_key = re.compile(rf"^{old_uid}(?=:[^\w])")
@@ -157,7 +170,7 @@ def update_config_uid(path, old_uid, new_uid, template=None):
             f.writelines(cfg)
             f.truncate()
         else:
-            with update_config(f) as cfg:
+            with cfg_update(f) as cfg:
                 # update uid
                 cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
                 # template refs
@@ -167,12 +180,12 @@ def update_config_uid(path, old_uid, new_uid, template=None):
                             dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
 
 
-def sort_config(glob, keys):
+def cfg_sort(glob, keys):
     raise NotImplementedError
     tag = rc["configs"]["header_tag"]
-    for p in glob_groups(glob):
-        with lock_config(p) as f:
-            with update_config(f) as cfg:
+    for p in cfg_glob(glob):
+        with cfg_lock(p) as f:
+            with cfg_update(f) as cfg:
                 header = cfg.pop(tag, None)
                 for u in reversed(uids_sort(cfg, keys)):  # noqa: F821
                     cfg.insert(0, u, cfg.pop(u))
@@ -180,14 +193,14 @@ def sort_config(glob, keys):
                     cfg.insert(0, tag, header)
 
 
-def pop(*uids, group=None):
+def cfg_pop(*uids, group=None):
     cfgs_paths = defaultdict(set)
     for u in uids:  # TODO: use SimsQuery
-        p, _ = load_config(u, group, expand=False)
+        p, _ = cfg_load(u, group, expand=False)
         cfgs_paths[p].add(u)
     for p, us in cfgs_paths.items():
-        with lock_config(p) as f:
-            with update_config(f) as cfg:
+        with cfg_lock(p) as f:
+            with cfg_update(f) as cfg:
                 for u in us:
                     for h in rc["IO-handlers"].values():
                         glob = h.split(",")[0].strip()
@@ -201,9 +214,9 @@ def pop(*uids, group=None):
                     logger.info(f"Deleted {u}")
 
 
-def gen_configs(template, params, glob=None):
+def cfg_gen(template, params, glob=None):
     generated = {}
-    for path in glob_groups(glob):
+    for path in cfg_glob(glob):
         configs = yamlrt.load(path)
         header = configs[rc["configs"]["header_tag"]]
         template = Template(header[template])
@@ -222,3 +235,48 @@ def gen_configs(template, params, glob=None):
             uids |= set(c)
         yamlrt.dump(configs, path)
     return generated
+
+
+def sims_or_group_arg(func_sims):
+    @wraps(func_sims)
+    def func_sims_or_group(sims_or_group, *args, **kwargs):
+        if isinstance(sims_or_group, str):
+            sims_or_group = SimsQuery(sims_or_group)
+        return func_sims(sims_or_group, *args, **kwargs)
+
+    return func_sims_or_group
+
+
+class SimsQuery:
+    def __init__(self, *group_globs, valid_uuid=True, select=None):
+        self.group_globs = group_globs or ["**/*"]
+        self.valid_uuid = valid_uuid
+        if self.valid_uuid:
+            # hardcoded default for backward compatibility with old .simsiorc files
+            # DEL when default rc file is deployed
+            uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
+            uid_filter = re.compile(uuid_regex, re.S).fullmatch
+        else:
+            uid_filter = rc["configs"]["header_tag"].__ne__
+        self.groups = {
+            path_to_group(p): set(filter(uid_filter, cfg))
+            for glob in self.group_globs
+            for p in cfg_glob(glob)
+            if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
+        }
+        if select is not None:
+            self.groups = {k: set(filter(select, us)) for k, us in self.groups.items()}
+
+    @cached_property
+    def uids(self):
+        return {u: g for g, us in self.groups.items() for u in us}
+
+    def __iter__(self):
+        return iter(self.uids)
+
+    def __len__(self):
+        return len(self.uids)
+
+    def __repr__(self):
+        args = f"group_globs={self.group_globs}, valid_uuid={self.valid_uuid}"
+        return f"{type(self).__name__}({args})"

@@ -12,61 +12,42 @@ from simsio.analysis.quantitites import Function, Measure
 from simsio.analysis.grids import Grid1D, bin_edges
 from simsio.analysis.numpy_extras import append_til_ndim
 
+__all__ = [
+    "grid_titles",
+    "plot_1d_data",
+    "plot_2d_data",
+    "axes_1d",
+    "report_1d",
+    "report_2d",
+    "join_obs_names",
+    "sanitize_fig_name",
+    "sm_from_obs",
+    "autoscale_norms",
+    "annote_image_axis",
+    "apply_obs_props",
+]
+
 logger = logging.getLogger(__name__)
 
+# TODO move to mplotter/config
 TILE_SIZE = 1.33
 AXES_PAD = 0.1
 CBAR_SIZE = 0.1
 MAX_DIGITIZED = 12
 
 
-def fix_mfc(l):
+def fix_mfc(l):  # TODO move to mplotter
     c = l.get_color()
     l.set(mfc=colors.to_rgba(c, 0.2), mec=colors.to_rgba(c, 1.0))
     return l
 
 
-def sanitize_fig_name(fig):
-    # TODO platform dependent, improve
-    fig.set_label(fig.get_label().replace(":", "!").replace("/", "_")[:128])  # FIXME
-
-
-def sm_from_obs(obs, us=None):
-    # generalize to log and unevenly spaced values
-    # copy because ScalarMappable(norm=my_norm).norm is my_norm
-    norm = getattr(obs, "norm", None)
-    cmap = getattr(obs, "cmap", None)
-    if us is not None:
-        norm = copy(norm) if norm else colors.Normalize()
-        cmap = copy(plt.get_cmap(cmap))
-        dat = np.ma.ravel(obs(us))  # w/o ma drops mask
-        uniq = np.unique(dat[~dat.mask])
-        if getattr(obs, "digitize", uniq.size < MAX_DIGITIZED):
-            cmap = cmap.resampled(uniq.size)
-            cbar_kwds = obs.setdefault("cbar_kwds", {})
-            try:
-                grid = Grid1D.from_points(uniq)
-            except ValueError:
-                # alternatively: NoNorm, but then sm.to_rgba(z) gives wrong color
-                norm = colors.BoundaryNorm(bin_edges(uniq), uniq.size)
-                cbar_kwds.setdefault("ticks", ticker.FixedLocator(uniq))
-            else:
-                # norm.autoscale_None(grid.extent) # FIXME do not resample then
-                norm.vmin, norm.vmax = grid.extent
-                cbar_kwds.setdefault(
-                    "ticks", ticker.MultipleLocator(grid.step, uniq[0])
-                )
-        else:
-            norm.autoscale_None(dat)
-    return cm.ScalarMappable(norm, cmap)
-
-
 # on top of matplotlib ones
-PROP_ALIASES = {"major_locator": "loc", "major_formatter": "fmt"}
+_PROP_ALIASES = {"major_locator": "loc", "major_formatter": "fmt"}
 
 
-def parse_aliases(kwds):
-    for name, alias in PROP_ALIASES.items():
+def _parse_aliases(kwds):
+    for name, alias in _PROP_ALIASES.items():
         if alias in kwds:
             if name in kwds:
                 raise ValueError(f"Specified both '{name}' and '{alias}'")
@@ -74,14 +55,14 @@ def parse_aliases(kwds):
     return kwds
 
 
-def parse_obs_props(obs, props_name, **props):
+def _parse_obs_props(obs, props_name, **props):
     props = getattr(obs, props_name, {}) | props
     # props = parse_aliases(props) # NOTE enable if needed
     return props
 
 
 def apply_obs_props(obj, obs, props_name, **props):
-    props = parse_obs_props(obs, props_name, **props)
+    props = _parse_obs_props(obs, props_name, **props)
     if props:  # avoid printing allowed values
         plt.setp(obj, **props)
     return props
@@ -100,7 +81,7 @@ def plot_1d_data(x_obs, y_obs, u=None, ax=None, **plot_kwds):
             logger.error(e)
             return None
     # use apply_obs_props on l instead?
-    plot_kwds = parse_obs_props(y_obs, "plot_kwds", **plot_kwds)
+    plot_kwds = _parse_obs_props(y_obs, "plot_kwds", **plot_kwds)
     if x_obs:
         l = ax.plot(x, y, **plot_kwds)
     else:
@@ -108,8 +89,34 @@ def plot_1d_data(x_obs, y_obs, u=None, ax=None, **plot_kwds):
     return l
 
 
-def join_obs_names(*obs, sep=",", junc="_vs_"):
-    return junc.join((sep.join((o.name for o in np.ravel(os) if o)) for os in obs))
+def axes_1d(ug, it, cbar_obs=None, plotting_func=None, plot_kwds=None, ax=None):
+    plotting_func = plotting_func or plot_1d_data
+    if cbar_obs:
+        ax.sm = cbar_obs.sm
+    for _, x_obs, y_obs in it:
+        x_obs = x_obs.item()
+        y_obs = y_obs.item()
+        if y_obs is None:
+            # no "off", there might be other obs in same axes
+            continue
+        _ug = ug[it.multi_index]
+        _plot_kwds = plot_kwds.copy()
+        if cbar_obs:
+            try:
+                z = np.ma.asanyarray(cbar_obs(_ug))
+                z = np.unique(z[~z.mask]).item()
+            except ValueError:
+                logger.warning("No unique z-value from cbar_obs")
+            else:
+                _plot_kwds["color"] = cbar_obs.sm.to_rgba(z)
+        _plot_kwds["label"] = y_obs
+        if x_obs:
+            ax.set_xscale(getattr(x_obs, "scale", "linear"))
+            ax.set_xlabel(x_obs)
+        ax.set_yscale(getattr(y_obs, "scale", "linear"))
+        ax.set_ylabel(y_obs)
+        # plotting function gets the final say on the axes
+        plotting_func(x_obs, y_obs, _ug, ax=ax, **_plot_kwds)
 
 
 def report_1d(
@@ -183,36 +190,6 @@ def report_1d(
     return fig, grid
 
 
-def axes_1d(ug, it, cbar_obs=None, plotting_func=None, plot_kwds=None, ax=None):
-    plotting_func = plotting_func or plot_1d_data
-    if cbar_obs:
-        ax.sm = cbar_obs.sm
-    for _, x_obs, y_obs in it:
-        x_obs = x_obs.item()
-        y_obs = y_obs.item()
-        if y_obs is None:
-            # no "off", there might be other obs in same axes
-            continue
-        _ug = ug[it.multi_index]
-        _plot_kwds = plot_kwds.copy()
-        if cbar_obs:
-            try:
-                z = np.ma.asanyarray(cbar_obs(_ug))
-                z = np.unique(z[~z.mask]).item()
-            except ValueError:
-                logger.warning("No unique z-value from cbar_obs")
-            else:
-                _plot_kwds["color"] = cbar_obs.sm.to_rgba(z)
-        _plot_kwds["label"] = y_obs
-        if x_obs:
-            ax.set_xscale(getattr(x_obs, "scale", "linear"))
-            ax.set_xlabel(x_obs)
-        ax.set_yscale(getattr(y_obs, "scale", "linear"))
-        ax.set_ylabel(y_obs)
-        # plotting function gets the final say on the axes
-        plotting_func(x_obs, y_obs, _ug, ax=ax, **_plot_kwds)
-
-
 def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
     ax = ax or plt.gca()
     if not obs:
@@ -244,28 +221,12 @@ def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
         # multiple cbars give problems when extend != "neither"
         if not hasattr(cax, "cbar"):
             # setp() does not work with Colorbar
-            cbar_kwds = parse_obs_props(obs, "cbar_kwds")
+            cbar_kwds = _parse_obs_props(obs, "cbar_kwds")
             cbar_kwds.setdefault("label", obs)
             cax.cbar = ax.cax.colorbar(im, **cbar_kwds)
     annote_image_axis(ax.xaxis, x_obs, u)
     annote_image_axis(ax.yaxis, y_obs, u)
     return im
-
-
-def annote_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
-    if not obs:
-        return
-    axis.set_label_text(obs)
-    vals = np.ma.asanyarray(obs(u))  # ensure has mask attribute
-    if axis.axis_name == "x":
-        vals = vals.swapaxes(0, 1)
-    try:
-        vals = [np.unique(vs[~vs.mask]).item() for vs in vals]
-    except ValueError:
-        logger.warning(f"Could not set image {axis.axis_name}-ticks")
-    else:
-        axis.set_ticks(np.arange(len(vals)))
-        axis.set_ticklabels([f"${v}$" for v in vals])
 
 
 def report_2d(
@@ -349,6 +310,36 @@ def report_2d(
     return fig, grid
 
 
+def sm_from_obs(obs, us=None):
+    # generalize to log and unevenly spaced values
+    # copy because ScalarMappable(norm=my_norm).norm is my_norm
+    norm = getattr(obs, "norm", None)
+    cmap = getattr(obs, "cmap", None)
+    if us is not None:
+        norm = copy(norm) if norm else colors.Normalize()
+        cmap = copy(plt.get_cmap(cmap))
+        dat = np.ma.ravel(obs(us))  # w/o ma drops mask
+        uniq = np.unique(dat[~dat.mask])
+        if getattr(obs, "digitize", uniq.size < MAX_DIGITIZED):
+            cmap = cmap.resampled(uniq.size)
+            cbar_kwds = obs.setdefault("cbar_kwds", {})
+            try:
+                grid = Grid1D.from_points(uniq)
+            except ValueError:
+                # alternatively: NoNorm, but then sm.to_rgba(z) gives wrong color
+                norm = colors.BoundaryNorm(bin_edges(uniq), uniq.size)
+                cbar_kwds.setdefault("ticks", ticker.FixedLocator(uniq))
+            else:
+                # norm.autoscale_None(grid.extent) # FIXME do not resample then
+                norm.vmin, norm.vmax = grid.extent
+                cbar_kwds.setdefault(
+                    "ticks", ticker.MultipleLocator(grid.step, uniq[0])
+                )
+        else:
+            norm.autoscale_None(dat)
+    return cm.ScalarMappable(norm, cmap)
+
+
 def autoscale_norms(obs, ug, agg_axs=None):
     obs = np.squeeze(obs, tuple(range(2, np.ndim(obs))))
     if all(getattr(o, "norm", None) and o.norm.scaled() for o in obs.ravel()):
@@ -384,6 +375,15 @@ def autoscale_norms(obs, ug, agg_axs=None):
             o.norm.autoscale_None([vmin, vmax])
         obs_scaled.append(o)
     return np.reshape(obs_scaled, br.shape)
+
+
+def join_obs_names(*obs, sep=",", junc="_vs_"):
+    return junc.join((sep.join((o.name for o in np.ravel(os) if o)) for os in obs))
+
+
+def sanitize_fig_name(fig):
+    # TODO platform dependent, improve
+    fig.set_label(fig.get_label().replace(":", "!").replace("/", "_")[:128])  # FIXME
 
 
 def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
@@ -428,3 +428,19 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
         axis.set_label_text(t)
         axis.set_label_position(pos)
         axis.label.set_visible(True)
+
+
+def annote_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
+    if not obs:
+        return
+    axis.set_label_text(obs)
+    vals = np.ma.asanyarray(obs(u))  # ensure has mask attribute
+    if axis.axis_name == "x":
+        vals = vals.swapaxes(0, 1)
+    try:
+        vals = [np.unique(vs[~vs.mask]).item() for vs in vals]
+    except ValueError:
+        logger.warning(f"Could not set image {axis.axis_name}-ticks")
+    else:
+        axis.set_ticks(np.arange(len(vals)))
+        axis.set_ticklabels([f"${v}$" for v in vals])

@@ -29,18 +29,27 @@ import dictdiffer
 import dpath
 import numpy as np
 
-from simsio.configs import load_config, update_config_uid
+from simsio.configs import cfg_load, cfg_update_uid
 from simsio.iocore import Cache
 from simsio.settings import rc
 
-__all__ = ["Simulation", "get_sim", "sim_or_uid_arg", "purge_registry", "purge_caches"]
+__all__ = [
+    "Simulation",
+    "get_sim",
+    "sim_or_uid_arg",
+    "purge_registry",
+    "purge_caches",
+    "valid_uuid",
+    "UID_DTYPE",
+    "sim_registry",
+]
 
 logger = logging.getLogger(__name__)
 
 sim_registry = {}
 
 
-def _valid_uuid(uid=None, raise_invalid=False):
+def valid_uuid(uid=None, raise_invalid=False):
     """
     Returns and/or check the validity of a UUID (universally unique identifier).
 
@@ -72,7 +81,7 @@ def _valid_uuid(uid=None, raise_invalid=False):
     return str(uid).replace("-", "")
 
 
-UID_DTYPE = np.array(_valid_uuid()).dtype
+UID_DTYPE = np.array(valid_uuid()).dtype
 
 
 def purge_registry(sims=None):
@@ -124,7 +133,7 @@ class Simulation(Cache):
         if uid and readonly:
             self.uid = uid.rsplit("~", 1)[0]
         else:
-            self.uid = _valid_uuid(uid)
+            self.uid = valid_uuid(uid)
         cfg = cfg or {}
         self.cfg_path = None
         self._save_time = None
@@ -173,15 +182,15 @@ class Simulation(Cache):
     @classmethod
     def from_config(cls, uid, group=None, template=None):
         # before writing/linking anything get config
-        cfg_path, cfg = load_config(uid, group)
+        cfg_path, cfg = cfg_load(uid, group)
         sim = cls(uid, cfg, readonly=False)
         sim.cfg_path = cfg_path
-        update_config_uid(cfg_path, uid, f"{sim.uid}~R", template)
+        cfg_update_uid(cfg_path, uid, f"{sim.uid}~R", template)
         return sim
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            update_config_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
+            cfg_update_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
 
     def __repr__(self):
         args = f"{self.uid!r}, readonly={self.readonly!r}"
@@ -195,7 +204,7 @@ class Simulation(Cache):
 
     def __copy__(self):
         new = super().__copy__()
-        new.uid = _valid_uuid()
+        new.uid = valid_uuid()
         new.cache = {}
         return new
 

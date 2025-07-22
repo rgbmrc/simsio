@@ -15,17 +15,13 @@ import matplotlib as mpl
 import numpy as np
 
 from simsio.simulations import get_sim
+from simsio.utils import is_numeric
 
-
-def is_numeric(val):
-    return np.issubdtype(np.asanyarray(val).dtype, np.number)
+__all__ = ["Function", "Measure", "id_", "indices_to_str"]
 
 
 def math_str(val):
-    s = str(val)
-    if is_numeric(val):
-        s = f"${s}$"
-    return s
+    return f"${str(val)}$" if is_numeric(val) else str(val)
 
 
 def nomath(text):

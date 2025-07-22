@@ -4,14 +4,17 @@ import cmcrameri.cm as ccm  # DEL
 import mplotter as plotter  # DEL
 
 from simsio.analysis.quantitites import Function, Measure, id_, nomath
+from simsio.analysis.numpy_extras import fftsymshift
 
 __all__ = [
     "id_",
     # basic
     "re_",
     "im_",
+    "re_and_im",
     "abs_",
     "arg_",
+    "abs_and_arg",
     "max_",
     "sum_",
     "sqrt_",
@@ -43,6 +46,7 @@ re_ = Function(np.real, label=r"$\Re$", **re_or_im_attrs)
 im_ = Function(np.imag, label=r"$\Im$", **re_or_im_attrs)
 abs_ = Function(np.abs, label=r"$|${x}$|$".format, cmap="viridis", norm=None)
 arg_ = Function(np.angle, label=r"$\arg$", **arg_attrs)
+conj_ = Function(np.conj, label=r"{x}$^*$".format)
 max_ = Function(np.max, label=r"$\max$")
 sum_ = Function(np.sum, label=r"$\sum$")
 # FIXME nomath in label breaks text
@@ -92,21 +96,10 @@ def rdev(x):
     return y / np.abs(ref) - np.sign(ref)
 
 
-def k_shift(dat, axis=None):
-    dat = np.fft.fftshift(dat, axes=axis)
-    if axis is None:
-        axis = range(dat.ndim)
-    pad = np.zeros((dat.ndim, 2), int)
-    pad[list(axis), 1] = 1  # natively supports negative axis indices
-    pad &= (np.expand_dims(dat.shape, 1) + 1) % 2
-    dat = np.pad(dat, pad_width=pad, mode="wrap")
-    return dat
-
-
 @Function.register(label=r"$\mathcal{F}$")
 def fourier(dat, axis=None, norm="ortho"):
     s = np.array(dat.shape)
     if axis is not None:
         s = s[np.asarray(axis)]
     s += s % 2
-    return k_shift(np.fft.fftn(dat, s=s, axes=axis, norm=norm), axis=axis)
+    return fftsymshift(np.fft.fftn(dat, s=s, axes=axis, norm=norm), axis=axis)
