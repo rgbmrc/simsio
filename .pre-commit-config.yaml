@@ -15,5 +15,5 @@ repos:
     # Ruff version.
     rev: v0.12.4
     hooks:
-      # - id: ruff-check
+      - id: ruff-check
       - id: ruff-format

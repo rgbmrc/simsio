@@ -29,9 +29,9 @@ import dictdiffer
 import dpath
 import numpy as np
 
-from simsio.settings import rc
-from simsio.iocore import Cache
 from simsio.configs import load_config, update_config_uid
+from simsio.iocore import Cache
+from simsio.settings import rc
 
 __all__ = ["Simulation", "get_sim", "sim_or_uid_arg", "purge_registry", "purge_caches"]
 

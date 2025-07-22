@@ -1,8 +1,6 @@
-from copy import copy
-from functools import cache
 import logging
 from collections import UserDict, namedtuple
-from importlib import import_module
+from copy import copy
 from pathlib import Path
 
 from simsio.utils import get_module_attr
@@ -88,7 +86,7 @@ class Cache(UserDict, IOHandler):
         return super().__getitem__(key)
 
     def __setitem__(self, key, val):
-        if not key in self.handles:
+        if key not in self.handles:
             raise KeyError(f"Cannot set unlinked IO handle {key}")
         super().__setitem__(key, val)
 

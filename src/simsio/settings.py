@@ -17,7 +17,7 @@ def rc_context(filenames, reset: None | bool = None):
         rc.write(f)
         f.flush()
         # in case there are keys that would not get overwritten
-        if reset != False:  # True or None
+        if reset is not False:  # True or None
             rc.clear()
         if reset is None:
             rc.read(RC_FILE)

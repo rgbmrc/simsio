@@ -12,7 +12,8 @@ import dpath
 import ruamel.yaml as yaml
 
 from simsio.settings import rc
-# from .analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
+
+# from simsio.analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
 
 logger = logging.getLogger(__name__)
 
@@ -167,12 +168,13 @@ def update_config_uid(path, old_uid, new_uid, template=None):
 
 
 def sort_config(glob, keys):
+    raise NotImplementedError
     tag = rc["configs"]["header_tag"]
     for p in glob_groups(glob):
         with lock_config(p) as f:
             with update_config(f) as cfg:
                 header = cfg.pop(tag, None)
-                for u in reversed(uids_sort(cfg, keys)):
+                for u in reversed(uids_sort(cfg, keys)):  # noqa: F821
                     cfg.insert(0, u, cfg.pop(u))
                 if header:
                     cfg.insert(0, tag, header)

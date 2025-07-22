@@ -1,17 +1,18 @@
+# ruff: noqa: E731 # lambdas are convenient here
+
 import inspect
 import operator
 import re
 from collections import defaultdict
 from copy import deepcopy
-from itertools import chain
 from functools import partial, reduce
+from itertools import chain
 from operator import matmul
 from typing import Callable, Self
 
+import dpath
 import matplotlib as mpl
 import numpy as np
-import dpath
-from dpath import _DEFAULT_SENTINEL
 
 from simsio.simulations import get_sim
 
@@ -33,7 +34,7 @@ def nomath(text):
 
 _FUNC_ARG = "$\:\cdot\:$"
 _OP_REGEX = re.compile("Same as (\W*(a|b)\W*?(a|b)?\W*)\.")
-_DEFAULT_SENTINEL = ...
+_DEFAULT_SENTINEL = ...  # object() or dpath._DEFAULT_SENTINEL unstable, why?
 
 
 def closest_common_ancestor(*cls_list):
@@ -101,7 +102,7 @@ class Function:
             _f_attrs_attrs.pop("func", None)
             _f_attrs_attrs.pop("name", None)
             attrs = _f_attrs_attrs | attrs
-        if type(func) == type(self):  # TODO too strict?
+        if type(func) is type(self):  # TODO too strict?
             # if isinstance(self, type(f_attrs)):  # NOTE not the reverse!
             func = f_attrs.func
             # FIXME also preserve name by default
@@ -134,7 +135,7 @@ class Function:
         if self.name in self._register:
             registered_self = self._register[self.name]
             if (
-                type(registered_self) != type(self)
+                type(registered_self) is not type(self)
                 or self.func is not registered_self.func
             ):
                 # TODO output a sensible amount of warnings
