@@ -40,7 +40,6 @@ __all__ = [
     "purge_registry",
     "purge_caches",
     "valid_uuid",
-    "UID_DTYPE",
     "sim_registry",
 ]
 
@@ -81,12 +80,9 @@ def valid_uuid(uid=None, raise_invalid=False):
     return str(uid).replace("-", "")
 
 
-UID_DTYPE = np.array(valid_uuid()).dtype
-
-
 def purge_registry(sims=None):
     if sims is not None:
-        for s in np.ravel(sims):
+        for s in sims:
             if isinstance(s, Simulation):
                 s = s.uid
             sim_registry.pop(s, None)

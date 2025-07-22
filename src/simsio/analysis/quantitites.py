@@ -15,7 +15,7 @@ import matplotlib as mpl
 import numpy as np
 
 from simsio.simulations import get_sim
-from simsio.utils import is_numeric
+from simsio.analysis.utils import is_numeric
 
 __all__ = ["Function", "Measure", "id_", "indices_to_str"]
 

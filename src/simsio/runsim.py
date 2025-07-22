@@ -16,7 +16,7 @@ from simsio import rc
 from simsio.simulations import Simulation
 from simsio.utils import get_module_attr
 
-__all__ = ["argparse", "run_sim"]
+__all__ = ["run_sim", "set_num_threads"]
 
 logger = logging.getLogger(__name__)
 

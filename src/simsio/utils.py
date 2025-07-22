@@ -1,12 +1,8 @@
 from importlib import import_module
 
-import numpy as np
+__all__ = ["get_module_attr"]
 
 
 def get_module_attr(name):
     mod, attr = name.rsplit(".", 1)
     return getattr(import_module(mod), attr)
-
-
-def is_numeric(val):
-    return np.issubdtype(np.asanyarray(val).dtype, np.number)

@@ -6,11 +6,14 @@ from numpy.typing import NDArray
 
 from simsio.configs import sims_or_group_arg
 from simsio.analysis.quantitites import Measure
-from simsio.simulations import UID_DTYPE, get_sim
+from simsio.simulations import get_sim, valid_uuid
 
 __all__ = ["uids_grid", "uids_sort"]
 
 logger = logging.getLogger(__name__)
+
+
+UID_DTYPE = np.array(valid_uuid()).dtype
 
 
 def get_params_vals(sims, keys):
