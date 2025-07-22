@@ -1,17 +1,23 @@
-import mplotter as plotter
+import logging
+from copy import copy, deepcopy
+from itertools import filterfalse
+
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
-from matplotlib import colors, ticker
+import mpl_toolkits.axes_grid1 as axg
+from matplotlib import colors, ticker, cm
 
-from ..analysis import Function, Measure
+from simsio.analysis.quantitites import Function, Measure
+from simsio.analysis.grids import Grid1D, bin_edges
+from simsio.analysis.numpy_extras import append_til_ndim
+
+logger = logging.getLogger(__name__)
 
 TILE_SIZE = 1.33
 AXES_PAD = 0.1
 CBAR_SIZE = 0.1
 MAX_DIGITIZED = 12
-
-gr = ""
 
 
 def fix_mfc(l):
@@ -23,16 +29,6 @@ def fix_mfc(l):
 def sanitize_fig_name(fig):
     # TODO platform dependent, improve
     fig.set_label(fig.get_label().replace(":", "!").replace("/", "_")[:128])  # FIXME
-
-
-def save_fig(fig=None, dest=None):
-    fig = fig or plt.gcf()
-    if dest:
-        plotter.save_fig(fig, dest)
-    else:
-        sanitize_fig_name(fig)
-        with fig_dir(gr):
-            plotter.save_fig(fig)
 
 
 def sm_from_obs(obs, us=None):
@@ -62,7 +58,7 @@ def sm_from_obs(obs, us=None):
                 )
         else:
             norm.autoscale_None(dat)
-    return ScalarMappable(norm, cmap)
+    return cm.ScalarMappable(norm, cmap)
 
 
 # on top of matplotlib ones
@@ -432,61 +428,3 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
         axis.set_label_text(t)
         axis.set_label_position(pos)
         axis.label.set_visible(True)
-
-
-def get_data_grids(dat, u=None):
-    shape = np.shape(dat)  # works also for scalar
-    if u:
-        try:
-            return [
-                Grid1D(lat_N, (0, 1)).broadcast_to(dat_N)
-                for lat_N, dat_N in zip(lvals(u), shape)
-            ]
-        except ValueError:
-            logger.warning("could not broadcast data grid")
-    return [Grid1D(dat_N, (0, 1)) for dat_N in shape]
-
-
-def get_data_extent(data_grids):
-    return [lim for grid in data_grids for lim in grid.extent]
-
-
-def axes_image(ax):
-    ax.set(
-        xticks=[0.5],
-        yticks=[0.5],
-        xticklabels=[],
-        yticklabels=[],
-        xlim=(0, 1),
-        ylim=(0, 1),
-    )
-    return ax
-
-
-def plot_2d_local(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
-    axes_image(ax)
-    try:
-        dat = obs(u)
-        first_valid = next(filter(None, np.ravel(u)))  # HACK
-    except (ValueError, StopIteration, TypeError):  # TypeError is foor o == None
-        grids = None  # should never be accessed
-    else:
-        grids = get_data_grids(dat, first_valid)
-        im_kwds.setdefault("extent", get_data_extent(grids))
-        im_kwds.setdefault("origin", "lower")
-    im = plot_2d_data(obs, u, x_obs=x_obs, y_obs=y_obs, ax=ax, **im_kwds)
-    if im is not None:
-        im.grids = grids
-    return im
-
-
-def report_single_2d(ug, obs, **report_2d_kwds):
-    report_2d_kwds.setdefault("plotting_func", plot_2d_local)
-    report_2d_kwds.setdefault("cbar_mode", "single")
-    return report_2d(np.atleast_2d(ug), [obs], **report_2d_kwds)
-
-
-def report_multi_2d(ug, obs, **report_2d_kwds):
-    report_2d_kwds.setdefault("plotting_func", plot_2d_local)
-    report_2d_kwds.setdefault("cbar_mode", "edge")
-    return report_2d([ug], obs, **report_2d_kwds)

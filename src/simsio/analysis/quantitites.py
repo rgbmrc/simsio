@@ -10,13 +10,10 @@ from typing import Callable, Self
 
 import matplotlib as mpl
 import numpy as np
+import dpath
 from dpath import _DEFAULT_SENTINEL
 
-from . import get_sim
-
-# not so large differnece ...
-# %timeit [nn_samples(u, num_samples=n) for n in sn_]
-# %timeit nn_samples(u, num_samples=sn_)
+from simsio.simulations import get_sim
 
 
 def is_numeric(val):
@@ -84,7 +81,6 @@ def indices_to_str(inds) -> str:
 
 
 class Function:
-
     _register = {}
     INVALID_NAMES = {None, "<lambda>", "None"}
     MERGED_ATTRS = {"line", "image", "axis", "cbar", "legend"}
@@ -368,7 +364,7 @@ class Function:
         raise TypeError("Function is not iterable")
 
     @classmethod
-    def register(cls, _from=None, **attrs):
+    def register(cls, _from=None, **attrs) -> Self:
         def _register_func(func):
             # even if func is already an instance of cls,
             # a new instance allows to overwrite attrs
@@ -384,7 +380,7 @@ class Function:
 
     @classmethod
     def from_callable(cls, func):
-        """pass subclasses through"""
+        """Pass subclasses through."""
         if isinstance(func, cls):
             return func
         cls_wrapped = type(getattr(func, "func", None))
@@ -458,7 +454,6 @@ class Function:
 
 
 class Measure(Function):
-
     _register = {}
 
     def __init__(self, func, _from=None, **attrs):

@@ -1,13 +1,13 @@
 import numpy as np
 from matplotlib import colors, ticker
-import cmcrameri as ccm  # DEL
+import cmcrameri.cm as ccm  # DEL
 import mplotter as plotter  # DEL
 
-from .quantitites import Function, id_, nomath
+from simsio.analysis.quantitites import Function, Measure, id_, nomath
 
 __all__ = [
-    "id_"
-    # np.*
+    "id_",
+    # basic
     "re_",
     "im_",
     "abs_",
@@ -19,14 +19,17 @@ __all__ = [
     "round_",
     "all_",
     "any_",
-    # np.linalg.*
+    # linalg
     "norm_",
     # abs & rel deviation
     "adev",
     "rdev",
+    # fourier
+    "fourier",
 ]
 
 re_or_im_attrs = {"cmap": ccm.vik_r, "norm": colors.CenteredNorm()}
+dev_attrs = {"cmap": "RdBu", "norm": colors.CenteredNorm()}
 arg_attrs = {
     "cmap": "twilight_shifted_r",
     "norm": colors.Normalize(-np.pi, +np.pi),
@@ -35,6 +38,7 @@ arg_attrs = {
         "format": plotter.annotating.SSFractionFormatter(1, unit=(np.pi, "\pi")),
     },
 }
+
 re_ = Function(np.real, label=r"$\Re$", **re_or_im_attrs)
 im_ = Function(np.imag, label=r"$\Im$", **re_or_im_attrs)
 abs_ = Function(np.abs, label=r"$|${x}$|$".format, cmap="viridis", norm=None)
@@ -47,6 +51,14 @@ mean_ = Function(np.mean, label=lambda x: rf"$\overline{{{nomath(x)}}}$")
 round_ = Function(np.round, label=id_)
 all_ = Function(np.all)
 any_ = Function(np.any)
+
+
+def abs_and_arg(measure: Measure) -> Measure:
+    return measure @ abs_, measure @ arg_
+
+
+def re_and_im(measure: Measure) -> Measure:
+    return measure @ re_, measure @ im_
 
 
 @Function.register(label="$\|${x}$\|$".format, cmap="viridis", norm=None)
@@ -68,15 +80,33 @@ def get_dev_operands(x):
     return y[0] if len(y) == 1 else y, ref
 
 
-@Function.register(
-    label=r"{x}$\text{{ dev.}}$".format, cmap="RdBu", norm=colors.CenteredNorm()
-)
+@Function.register(label=r"{x}$\text{{ dev.}}$".format, **dev_attrs)
 def adev(x):
     y, ref = get_dev_operands(x)
     return y - ref
 
 
-@Function.register(adev, label=r"{x}$\text{{ rel. dev.}}$".format)
+@Function.register(label=r"{x}$\text{{ rel. dev.}}$".format, **dev_attrs)
 def rdev(x):
     y, ref = get_dev_operands(x)
     return y / np.abs(ref) - np.sign(ref)
+
+
+def k_shift(dat, axis=None):
+    dat = np.fft.fftshift(dat, axes=axis)
+    if axis is None:
+        axis = range(dat.ndim)
+    pad = np.zeros((dat.ndim, 2), int)
+    pad[list(axis), 1] = 1  # natively supports negative axis indices
+    pad &= (np.expand_dims(dat.shape, 1) + 1) % 2
+    dat = np.pad(dat, pad_width=pad, mode="wrap")
+    return dat
+
+
+@Function.register(label=r"$\mathcal{F}$")
+def fourier(dat, axis=None, norm="ortho"):
+    s = np.array(dat.shape)
+    if axis is not None:
+        s = s[np.asarray(axis)]
+    s += s % 2
+    return k_shift(np.fft.fftn(dat, s=s, axes=axis, norm=norm), axis=axis)

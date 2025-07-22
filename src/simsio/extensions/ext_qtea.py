@@ -63,7 +63,6 @@ def unravel(obs1d, lvals, *, ndim=0, map_type="HilbertCurveMap", argmap=None):
 
 
 class QuantumGreenTeaSimulation(Simulation):
-
     unravel_classes = {"TNObsLocal", "TNObsCorr"}
 
     def __init__(self, *args, **kwargs):

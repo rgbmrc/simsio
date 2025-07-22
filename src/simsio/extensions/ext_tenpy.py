@@ -24,7 +24,6 @@ class TeNPyYAMLSerializer(YAMLSerializer):
 
 
 class TeNPySimulation(Simulation):
-
     def close(self):
         try:
             self.par.warn_unused(recursive=True)

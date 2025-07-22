@@ -5,7 +5,6 @@ from quspin.operators import hamiltonian
 
 
 class Observable:
-
     def __init__(self, terms, sites):
         self.terms = terms
         self.sites = sites
@@ -17,7 +16,6 @@ class Observable:
 
 
 class ObsLocal(Observable):
-
     def __init__(self, terms, sites, **obs_kwargs):
         terms = [
             hamiltonian([[o, [[v, s]]] for o, v in terms.items()], [], **obs_kwargs)

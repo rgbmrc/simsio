@@ -3,73 +3,13 @@ import logging
 from functools import cached_property, wraps
 
 import numpy as np
-import dpath
 
-from ..settings import rc
-from ..simulations import Simulation, UID_DTYPE
-from ..configs import yamlsf, path_to_group, glob_groups
-from .quantitites import Measure
+from simsio.settings import rc
+from simsio.simulations import get_sim, UID_DTYPE
+from simsio.configs import yamlsf, path_to_group, glob_groups
+from simsio.analysis.quantitites import Measure
 
 logger = logging.getLogger(__name__)
-
-
-sim_registry = {}
-
-
-def purge_registry(sims=None):
-    if sims is not None:
-        for s in np.ravel(sims):
-            if isinstance(s, Simulation):
-                s = s.uid
-            sim_registry.pop(s, None)
-    else:
-        sim_registry.clear()
-
-
-def purge_caches(keys=None):
-    for s in sim_registry.values():
-        s.purge_cache(keys)
-
-
-def get_sim(sim_or_uid, group=None):
-    """
-    Retreives a simulation from the register, building it if not already present.
-
-    The eventual Simulation initialization uses default arguments
-    (except for group, if provided).
-    """
-    if isinstance(sim_or_uid, Simulation) or sim_or_uid is np.ma.masked:
-        return sim_or_uid
-    if not isinstance(sim_or_uid, str):
-        raise TypeError(f"Expected str uid, got {type(sim_or_uid).__name__}")
-    if not sim_or_uid:
-        return np.ma.masked
-    if sim_or_uid not in sim_registry:
-        sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
-        logger.debug(f"Cached simulation {sim_or_uid}")
-    return sim_registry[sim_or_uid]
-
-
-def sim_or_uid_arg(fun_sim):
-    @wraps(fun_sim)
-    def fun_sim_or_uid(sim, *args, **kwargs):
-        return fun_sim(get_sim(sim), *args, **kwargs)
-
-    return fun_sim_or_uid
-
-
-@sim_or_uid_arg
-def extract_text(sim, key, regex, reverse=False, op="search"):
-    d = sim[key]
-    if reverse:
-        d = "\n".join(reversed(d.splitlines()))
-    return getattr(re.compile(regex), op)(d)
-
-
-@sim_or_uid_arg
-def extract_dict(sim, key, glob, op=None):
-    op = op or dpath.get
-    return op(sim[key], glob)
 
 
 class SimsQuery:
@@ -151,10 +91,8 @@ def uids_grid(sims, keys) -> tuple[np.ndarray, dict[Measure, np.ndarray]]:
 
 @sims_or_group_arg
 def uids_sort(sims, keys, return_vals=False):
-    """
-    Sorts a set of uids in lexicographic order according to the values of the given
-    parmeters.
-    """
+    """Sorts a set of uids in lexicographic order according to the values of the given
+    parmeters."""
     keys, vals = _get_params_vals(sims, keys)
     idxs = np.lexsort(vals[::-1])
     sims = list(sims)  # need __getitem__

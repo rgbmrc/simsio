@@ -1,5 +1,6 @@
 """
 **Abbreviations**
+
  - sim: simulation
  - uid: simulation identifier (human provided key or computer generated uuid)
 
@@ -20,6 +21,7 @@ import shlex
 import sys
 import time
 import uuid
+from functools import wraps
 from string import Template
 from subprocess import run
 
@@ -30,9 +32,12 @@ import numpy as np
 from simsio.settings import rc
 from simsio.iocore import Cache
 from simsio.configs import load_config, update_config_uid
-from simsio.analysis.collect import sim_registry
+
+__all__ = ["Simulation", "get_sim", "sim_or_uid_arg", "purge_registry", "purge_caches"]
 
 logger = logging.getLogger(__name__)
+
+sim_registry = {}
 
 
 def _valid_uuid(uid=None, raise_invalid=False):
@@ -68,6 +73,48 @@ def _valid_uuid(uid=None, raise_invalid=False):
 
 
 UID_DTYPE = np.array(_valid_uuid()).dtype
+
+
+def purge_registry(sims=None):
+    if sims is not None:
+        for s in np.ravel(sims):
+            if isinstance(s, Simulation):
+                s = s.uid
+            sim_registry.pop(s, None)
+    else:
+        sim_registry.clear()
+
+
+def purge_caches(keys=None):
+    for s in sim_registry.values():
+        s.purge_cache(keys)
+
+
+def get_sim(sim_or_uid, group=None):
+    """
+    Retreives a simulation from the register, building it if not already present.
+
+    The eventual Simulation initialization uses default arguments (except for group, if
+    provided).
+    """
+    if isinstance(sim_or_uid, Simulation) or sim_or_uid is np.ma.masked:
+        return sim_or_uid
+    if not isinstance(sim_or_uid, str):
+        raise TypeError(f"Expected str uid, got {type(sim_or_uid).__name__}")
+    if not sim_or_uid:
+        return np.ma.masked
+    if sim_or_uid not in sim_registry:
+        sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
+        logger.debug(f"Cached simulation {sim_or_uid}")
+    return sim_registry[sim_or_uid]
+
+
+def sim_or_uid_arg(fun_sim):
+    @wraps(fun_sim)
+    def fun_sim_or_uid(sim, *args, **kwargs):
+        return fun_sim(get_sim(sim), *args, **kwargs)
+
+    return fun_sim_or_uid
 
 
 class Simulation(Cache):

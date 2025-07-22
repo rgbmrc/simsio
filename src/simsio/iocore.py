@@ -5,7 +5,7 @@ from collections import UserDict, namedtuple
 from importlib import import_module
 from pathlib import Path
 
-from .utils import get_module_attr
+from simsio.utils import get_module_attr
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,6 @@ class IOHandler:
             return p + bak  # p string
 
     def link(self, key, path, write_mode, serializer):
-
         if isinstance(serializer, str):
             serializer = get_module_attr(serializer)()
 

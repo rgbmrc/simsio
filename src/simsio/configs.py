@@ -12,7 +12,7 @@ import dpath
 import ruamel.yaml as yaml
 
 from simsio.settings import rc
-from .analysis.collect import uids_sort
+# from .analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
 
 logger = logging.getLogger(__name__)
 
