@@ -2,18 +2,18 @@ import logging
 from itertools import starmap
 
 import numpy as np
-from numpy.typing import NDArray
+import xarray as xr
 
 from simsio.configs import sims_or_group_arg
 from simsio.analysis.quantitites import Measure
-from simsio.simulations import get_sim, valid_uuid
+from simsio.simulations import get_sim
 
 __all__ = ["uids_grid", "uids_sort"]
 
 logger = logging.getLogger(__name__)
 
 
-UID_DTYPE = np.array(valid_uuid()).dtype
+_UID_DTYPE = "<U256"
 
 
 def get_params_vals(sims, keys):
@@ -27,7 +27,7 @@ def get_params_vals(sims, keys):
 
 
 @sims_or_group_arg
-def uids_grid(sims, keys) -> tuple[NDArray, dict[Measure, NDArray]]:
+def uids_grid(sims, keys) -> xr.DataArray:
     # NOTE why returning array of strings and not Simulation objects?
     # among other reasons:
     # https://github.com/numpy/numpy/issues/27212#issue-2465378354
@@ -39,12 +39,19 @@ def uids_grid(sims, keys) -> tuple[NDArray, dict[Measure, NDArray]]:
         uniq[k] = u
         idxs[j] = i
     shape = tuple(map(len, uniq.values()))
-    grid = np.ma.masked_all(shape, dtype=UID_DTYPE)
+    grid = np.empty(shape, dtype=_UID_DTYPE)
     for i, s in zip(idxs.T, sims):
         grid[tuple(i)] = getattr(s, "uid", s)
-    if not grid.mask.any():
-        grid = grid.data
-    return grid, uniq
+    # xarray works best with string names
+    # https://docs.xarray.dev/en/stable/user-guide/terminology.html#term-name
+    dims = tuple(k.name for k in keys)
+    coords = {k.name: v for k, v in uniq.items()}
+    # we also keep the (hashable) Measure objects as (duplicate) coordinates
+    # here explicit tuple coercion is required for non-string names
+    # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
+    coords |= {k: (k.name, v) for k, v in uniq.items()}
+    grid = xr.DataArray(grid, coords, dims)
+    return grid.where(grid != "", "")
 
 
 @sims_or_group_arg
@@ -60,3 +67,9 @@ def uids_sort(sims, keys, return_vals=False):
         vals = [vals[i] for i in idxs]
         return sims, vals
     return sims
+
+
+def mask_grid(grid, cond, drop=False):
+    # register a "simsio" accessor instead?
+    # https://docs.xarray.dev/en/stable/internals/extending-xarray.html
+    return grid.where(cond, "", drop=drop)

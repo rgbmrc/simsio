@@ -13,6 +13,7 @@ from typing import Callable, Self
 import dpath
 import matplotlib as mpl
 import numpy as np
+import xarray as xr
 
 from simsio.simulations import get_sim
 from simsio.analysis.utils import is_numeric
@@ -490,9 +491,9 @@ class Measure(Function):
             return super().__call__(**kwds)  # partial
         try:
             sims_like = get_sim(sims_like)
-        except TypeError:
+        except (ValueError, TypeError):  # e.g. ndarray
             return self.vectorized(sims_like, **kwds)
-        if sims_like is np.ma.masked:
+        if not sims_like:
             return np.ma.masked  # consistent with vectorized
         if self.cached and not kwds:  # FIXME
             if self not in sims_like.cache:
@@ -502,7 +503,10 @@ class Measure(Function):
             return super().__call__(sims_like, **kwds)
 
     def vectorized(self, sims, **kwds):
-        sims_array = np.ma.asanyarray(sims)
+        try:  # xarray.DataArray
+            sims_array = sims.to_masked_array()
+        except AttributeError:  # anything else
+            sims_array = np.ma.asanyarray(sims)
         if not sims_array.shape:
             raise TypeError(f"Error computing {self!r}, {sims.item()} is not iterable")
         # both empty uids and masked values evaluate to False
@@ -523,6 +527,9 @@ class Measure(Function):
             if not np.ma.is_masked(out) and not isinstance(sims, np.ma.MaskedArray):
                 out = out.data
         return out
+
+    def xarray(self, sims, **kwds):
+        return xr.DataArray(self.vectorized(sims, **kwds), sims.coords, sims.dims)
 
     def lazy_operator(self, op, other=None, *, op_fmt=None, swap=False):
         res = super().lazy_operator(op, other, op_fmt=op_fmt, swap=swap)
