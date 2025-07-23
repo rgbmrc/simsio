@@ -165,14 +165,8 @@ def report_1d(
         order="C",
     )
     for ax, _ in zip(grid, grid_iter):
-        axes_func(
-            ug[grid_iter.multi_index],
-            plot_iter,
-            cbar_obs,
-            plotting_func,
-            plot_kwds,
-            ax,
-        )
+        us = ug[grid_iter.multi_index]
+        axes_func(us, plot_iter, cbar_obs, plotting_func, plot_kwds, ax)
         if y_obs.shape[AX_LOOP_DIM] > 1:
             ax.legend()
     if cbar_obs:
