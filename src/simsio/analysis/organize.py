@@ -46,10 +46,10 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # https://docs.xarray.dev/en/stable/user-guide/terminology.html#term-name
     dims = tuple(k.name for k in keys)
     coords = {k.name: v for k, v in uniq.items()}
-    # we also keep the (hashable) Measure objects as (duplicate) coordinates
+    # we can also keep the (hashable) Measure objects as duplicate coords
     # here explicit tuple coercion is required for non-string names
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
-    coords |= {k: (k.name, v) for k, v in uniq.items()}
+    # coords |= {k: (k.name, v) for k, v in uniq.items()}
     grid = xr.DataArray(grid, coords, dims)
     return grid.where(grid != "", "")
 
