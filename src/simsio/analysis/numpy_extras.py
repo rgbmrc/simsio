@@ -19,12 +19,6 @@ def group_by(vals, keys):
     # return np.array([[d, c.mean(), c.std(ddof=1)] for d, c in zip(dist, corr)]).T
 
 
-def assert_real(a):
-    a = np.asanyarray(a)
-    assert np.allclose(a.imag, 0)
-    return a.real
-
-
 def append_til_ndim(a, ndim):
     a = np.asanyarray(a)
     return np.expand_dims(a, tuple(range(a.ndim, ndim)))

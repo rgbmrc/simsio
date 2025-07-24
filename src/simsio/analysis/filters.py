@@ -12,6 +12,7 @@ __all__ = [
     "re_",
     "im_",
     "re_and_im",
+    "assert_real",
     "abs_",
     "arg_",
     "abs_and_arg",
@@ -55,6 +56,13 @@ mean_ = Function(np.mean, label=lambda x: rf"$\overline{{{nomath(x)}}}$")
 round_ = Function(np.round, label=id_)
 all_ = Function(np.all)
 any_ = Function(np.any)
+
+
+@Function.register(label=id_)
+def assert_real(a):
+    a = np.asanyarray(a)
+    assert np.allclose(a.imag, 0)
+    return a.real
 
 
 def abs_and_arg(measure: Measure) -> Measure:

@@ -6,3 +6,9 @@ __all__ = ["get_module_attr"]
 def get_module_attr(name):
     mod, attr = name.rsplit(".", 1)
     return getattr(import_module(mod), attr)
+
+
+def as_scalar(x):
+    if hasattr(x, "item"):
+        return x.item()
+    return x

@@ -13,9 +13,6 @@ __all__ = ["uids_grid", "uids_sort"]
 logger = logging.getLogger(__name__)
 
 
-_UID_DTYPE = "<U256"
-
-
 def get_params_vals(sims, keys):
     try:
         sims = sims.items()
@@ -39,19 +36,17 @@ def uids_grid(sims, keys) -> xr.DataArray:
         uniq[k] = u
         idxs[j] = i
     shape = tuple(map(len, uniq.values()))
-    grid = np.empty(shape, dtype=_UID_DTYPE)
+    grid = np.empty(shape, dtype=object)
     for i, s in zip(idxs.T, sims):
         grid[tuple(i)] = getattr(s, "uid", s)
     # xarray works best with string names
     # https://docs.xarray.dev/en/stable/user-guide/terminology.html#term-name
-    dims = tuple(k.name for k in keys)
-    coords = {k.name: v for k, v in uniq.items()}
     # we can also keep the (hashable) Measure objects as duplicate coords
     # here explicit tuple coercion is required for non-string names
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
+    # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
-    grid = xr.DataArray(grid, coords, dims)
-    return grid.where(grid != "", "")
+    return xr.DataArray(grid, uniq.values(), tuple(k.name for k in keys))
 
 
 @sims_or_group_arg
@@ -73,3 +68,15 @@ def mask_grid(grid, cond, drop=False):
     # register a "simsio" accessor instead?
     # https://docs.xarray.dev/en/stable/internals/extending-xarray.html
     return grid.where(cond, "", drop=drop)
+
+
+@xr.register_dataarray_accessor("simsio")
+class UIDSGrid:
+    def __init__(self, xarray_obj: xr.DataArray):
+        self._obj: xr.DataArray = xarray_obj
+
+    def add_dim(self, obs, axis) -> xr.DataArray:
+        obs = Measure.get(obs)
+        val = np.unique(obs(self._obj))
+        assert val.size == 1
+        return self._obj.expand_dims({obs.name: val}, axis)

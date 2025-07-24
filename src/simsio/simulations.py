@@ -21,6 +21,7 @@ import shlex
 import sys
 import time
 import uuid
+from cmath import isnan  # cmath just to be extra safe
 from functools import wraps
 from string import Template
 from subprocess import run
@@ -31,6 +32,7 @@ import dpath
 from simsio.configs import cfg_load, cfg_update_uid
 from simsio.iocore import Cache
 from simsio.settings import rc
+from simsio.utils import as_scalar
 
 __all__ = [
     "Simulation",
@@ -103,17 +105,20 @@ def get_sim(sim_or_uid, group=None):
 
     Raises
     ------
-    ValueError
-        If sim_or_uid is null or invalid.
+    ValueError, TypeError
+        If sim_or_uid is neither null nor invalid.
     """
-    if not sim_or_uid:  # raises ValueError for ndarray
-        return
     if isinstance(sim_or_uid, Simulation):
-        return sim_or_uid  # should we still insert in registry?
-    try:  # scalar "array"
-        sim_or_uid = sim_or_uid.item()
-    except AttributeError:
-        pass
+        return sim_or_uid  # OPT should we still insert in registry?
+    # scalar array, e.g. from iterating over xarray.DataArray
+    sim_or_uid = as_scalar(sim_or_uid)  # raises ValueError for non-scalar
+    # None, "", and np.ma.masked all evaluate to False, but nan doesn't
+    # xarray masks with nan by default, cannot rely on user to avoid it
+    # check before initializing the Simulation, which may:
+    # generate a dummy uid (None) or raise TypeError (nan)
+    # NOTE isnan may raise TypeError, should we let Simulation() validate?
+    if not sim_or_uid or not isinstance(sim_or_uid, str) and isnan(sim_or_uid):
+        return
     if sim_or_uid not in sim_registry:
         sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
         logger.debug(f"Cached simulation {sim_or_uid}")
@@ -133,7 +138,12 @@ class Simulation(Cache):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
         if uid and readonly:
-            self.uid = uid.rsplit("~", 1)[0]
+            try:
+                self.uid = uid.rsplit("~", 1)[0]
+            except AttributeError as e:
+                # otherwise we must catch AttrbiuteError in Measure.__call__
+                msg = f"Expected string-like uid, got {type(uid).__name__}"
+                raise TypeError(msg) from e
         else:
             self.uid = valid_uuid(uid)
         cfg = cfg or {}

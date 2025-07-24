@@ -15,8 +15,9 @@ import matplotlib as mpl
 import numpy as np
 import xarray as xr
 
-from simsio.simulations import get_sim
 from simsio.analysis.utils import is_numeric
+from simsio.simulations import get_sim
+from simsio.utils import as_scalar
 
 __all__ = ["Function", "Measure", "id_", "indices_to_str"]
 
@@ -32,6 +33,7 @@ def nomath(text):
 _FUNC_ARG = "$\:\cdot\:$"
 _OP_REGEX = re.compile("Same as (\W*(a|b)\W*?(a|b)?\W*)\.")
 _DEFAULT_SENTINEL = ...  # object() or dpath._DEFAULT_SENTINEL unstable, why?
+_NO_ARG_SENTINEL = object()
 
 
 def closest_common_ancestor(*cls_list):
@@ -172,9 +174,11 @@ class Function:
         return self.string()
 
     def __hash__(self) -> int:
+        # return hash(self.name) # NOTE for xarray, unsafe
         return hash(repr(self))
 
     def __eq__(self, other) -> bool:
+        # return self.name == getattr(other, "name", other) # NOTE for xarray, unsafe
         # NOTE dangerous!
         return repr(self) == repr(other)
 
@@ -431,7 +435,9 @@ class Function:
         if val is _DEFAULT_SENTINEL and x is not None:
             val = self(x)
         if val is not _DEFAULT_SENTINEL:
-            sep = sep if sep is not None else ("${}={}$" if l else "")
+            val = as_scalar(val)
+            if sep is None:
+                sep = "${}={}$" if l else ""
             if math is None:
                 math = is_numeric(val)
             if math:  # str since np.nan != np.nan and np.nan is not float("nan")
@@ -484,10 +490,10 @@ class Measure(Function):
     #     print(name)
     #     super().__setattr__(name, value)
 
-    def __call__(self, sims_like=None, **kwds):
+    def __call__(self, sims_like=_NO_ARG_SENTINEL, **kwds):
         # should we allow args/kwds result caching and
         # register keys need to be reviewed
-        if sims_like is None:
+        if sims_like is _NO_ARG_SENTINEL:
             return super().__call__(**kwds)  # partial
         try:
             sims_like = get_sim(sims_like)
@@ -509,8 +515,9 @@ class Measure(Function):
             sims_array = np.ma.asanyarray(sims)
         if not sims_array.shape:
             raise TypeError(f"Error computing {self!r}, {sims.item()} is not iterable")
-        # both empty uids and masked values evaluate to False
-        out = [self(sim, **kwds) for sim in sims_array.flat if sim]
+        # skip instead of inserting masked to ensure homogeneous out
+        # get_sim first to detect invalid sims (e.g., nan evaluates to True)
+        out = [self(sim, **kwds) for sim in map(get_sim, sims_array.flat) if sim]
         # guess output dtype and shape
         out = np.ma.asanyarray(out)
         shape = sims_array.shape + out.shape[1:]
