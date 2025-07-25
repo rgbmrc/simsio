@@ -28,6 +28,7 @@ from subprocess import run
 
 import dictdiffer
 import dpath
+from numpy.ma import masked  # numpy dependency :(
 
 from simsio.configs import cfg_load, cfg_update_uid
 from simsio.iocore import Cache
@@ -108,12 +109,11 @@ def get_sim(sim_or_uid, group=None):
     ValueError, TypeError
         If sim_or_uid is neither null nor invalid.
     """
-    if isinstance(sim_or_uid, Simulation):
+    if isinstance(sim_or_uid, Simulation) or sim_or_uid is masked:
         return sim_or_uid  # OPT should we still insert in registry?
-    # scalar array, e.g. from iterating over xarray.DataArray
+    # handle scalar array, e.g. from iterating over xarray.DataArray
     sim_or_uid = as_scalar(sim_or_uid)  # raises ValueError for non-scalar
-    # None, "", and np.ma.masked all evaluate to False, but nan doesn't
-    # xarray masks with nan by default, cannot rely on user to avoid it
+    # None and "" evaluate to False, but nan (xarray's masked) doesn't
     # check before initializing the Simulation, which may:
     # generate a dummy uid (None) or raise TypeError (nan)
     # NOTE isnan may raise TypeError, should we let Simulation() validate?

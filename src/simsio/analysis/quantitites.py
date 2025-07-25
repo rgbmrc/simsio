@@ -190,8 +190,7 @@ class Function:
         try:
             return self.func(*args, **kwds)
         except Exception as e:
-            if self.default is not _DEFAULT_SENTINEL:
-                return self.default
+            # FIXME we used to return default (if any) but now default is Measure-only
             # TODO improve formatting
             raise ValueError(f"Error computing {self!r} on {args}, {kwds}") from e
 
@@ -500,8 +499,9 @@ class Measure(Function):
         except (ValueError, TypeError):  # e.g. ndarray
             return self.vectorized(sims_like, **kwds)
         if not sims_like:
-            # TODO return default (if any) instead? if so, update vectorized
-            return np.ma.masked  # consistent with vectorized
+            if sims_like is np.ma.masked or self.default is _DEFAULT_SENTINEL:
+                return np.ma.masked
+            return self.default
         if self.cached and not kwds:  # FIXME
             if self not in sims_like.cache:
                 sims_like.cache[self] = super().__call__(sims_like)
@@ -510,6 +510,8 @@ class Measure(Function):
             return super().__call__(sims_like, **kwds)
 
     def vectorized(self, sims, **kwds):
+        # np.vectorize does not play well with masks & arbitrary otypes
+        # and is more general than needed, so we implement this ourselves
         try:  # xarray.DataArray
             sims_array = sims.to_masked_array()
         except AttributeError:  # anything else
@@ -517,25 +519,26 @@ class Measure(Function):
         if not sims_array.shape:
             raise TypeError(f"Error computing {self!r}.vectorized on {sims}")
         # get_sim first to detect missing sims (e.g., nan evaluates to True)
-        # skip instead of inserting masked to ensure homogeneous out
-        # even *if* we wanted to broadcast, np.broadcast ignores mask
-        out = [self(sim, **kwds) for sim in map(get_sim, sims_array.flat) if sim]
+        sims_array = np.frompyfunc(get_sim, 1, 1)(sims_array)  # respects mask
         # guess output dtype and shape
-        out = np.ma.asanyarray(out)
+        # skip missing sims (masked/default value) to ensure homogeneous
+        # even *if* we wanted to broadcast, np.broadcast_arrays ignores mask
+        # in principle we could infer shape & dtype from first valid sim
+        # but, e.g., numpy casts float to int silently truncating decimals
+        # while the following converts ints to floats & fails for scalars
+        # dtype = np.common_type(*out); shape = np.broadcast(*out).shape
+        out = np.ma.array([self(sim, **kwds) for sim in sims_array.flat if sim])
         shape = sims_array.shape + out.shape[1:]
-        # following recipe converts ints to floats & fails for scalars
-        # dtype = np.common_type(*res); shape = np.broadcast(*res).shape
         try:
             out = out.reshape(shape)
-        except ValueError:  # there were masked or empty uids
+        except ValueError:  # there were missing sims
             out, out_it = np.ma.masked_all(shape, out.dtype), iter(out)
             for ij, sim in np.ndenumerate(sims_array):
-                # OPT cache get_sim from above?
-                # get_sim to consistently detect missing sims
-                # otherwise we fill the wrong entries!
-                if get_sim(sim):
-                    out[ij] = next(out_it)
+                # even if get_sim() -> None, call self for consistency
+                # with non-vectorized (e.g., about masked vs default)
+                out[ij] = next(out_it) if sim else self(sim, **kwds)
         else:
+            # if sims is a masked array, we preserve the mask, even if trivial
             if not np.ma.is_masked(out) and not isinstance(sims, np.ma.MaskedArray):
                 out = out.data
         return out
