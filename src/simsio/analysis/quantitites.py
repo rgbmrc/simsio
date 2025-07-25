@@ -500,6 +500,7 @@ class Measure(Function):
         except (ValueError, TypeError):  # e.g. ndarray
             return self.vectorized(sims_like, **kwds)
         if not sims_like:
+            # TODO return default (if any) instead? if so, update vectorized
             return np.ma.masked  # consistent with vectorized
         if self.cached and not kwds:  # FIXME
             if self not in sims_like.cache:
@@ -514,9 +515,10 @@ class Measure(Function):
         except AttributeError:  # anything else
             sims_array = np.ma.asanyarray(sims)
         if not sims_array.shape:
-            raise TypeError(f"Error computing {self!r}, {sims.item()} is not iterable")
+            raise TypeError(f"Error computing {self!r}.vectorized on {sims}")
+        # get_sim first to detect missing sims (e.g., nan evaluates to True)
         # skip instead of inserting masked to ensure homogeneous out
-        # get_sim first to detect invalid sims (e.g., nan evaluates to True)
+        # even *if* we wanted to broadcast, np.broadcast ignores mask
         out = [self(sim, **kwds) for sim in map(get_sim, sims_array.flat) if sim]
         # guess output dtype and shape
         out = np.ma.asanyarray(out)
@@ -528,7 +530,10 @@ class Measure(Function):
         except ValueError:  # there were masked or empty uids
             out, out_it = np.ma.masked_all(shape, out.dtype), iter(out)
             for ij, sim in np.ndenumerate(sims_array):
-                if sim:
+                # OPT cache get_sim from above?
+                # get_sim to consistently detect missing sims
+                # otherwise we fill the wrong entries!
+                if get_sim(sim):
                     out[ij] = next(out_it)
         else:
             if not np.ma.is_masked(out) and not isinstance(sims, np.ma.MaskedArray):
