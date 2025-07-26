@@ -15,7 +15,7 @@ import matplotlib as mpl
 import numpy as np
 import xarray as xr
 
-from simsio.analysis.utils import is_numeric
+from simsio.analysis.utils import is_numeric, as_ndarray
 from simsio.simulations import get_sim
 from simsio.utils import as_scalar
 
@@ -197,7 +197,7 @@ class Function:
     def __matmul__(self, other):
         other = Function.from_callable(other)
         attrs = self.compose_attrs(self, other)
-        if other.default == _DEFAULT_SENTINEL and self.default != _DEFAULT_SENTINEL:
+        if other.default is _DEFAULT_SENTINEL and self.default is not _DEFAULT_SENTINEL:
             try:
                 attrs["default"] = other(self.default)
             except ValueError:
@@ -512,10 +512,7 @@ class Measure(Function):
     def vectorized(self, sims, **kwds):
         # np.vectorize does not play well with masks & arbitrary otypes
         # and is more general than needed, so we implement this ourselves
-        try:  # xarray.DataArray
-            sims_array = sims.to_masked_array()
-        except AttributeError:  # anything else
-            sims_array = np.ma.asanyarray(sims)
+        sims_array = as_ndarray(sims)
         if not sims_array.shape:
             raise TypeError(f"Error computing {self!r}.vectorized on {sims}")
         # get_sim first to detect missing sims (e.g., nan evaluates to True)
@@ -535,7 +532,7 @@ class Measure(Function):
             out, out_it = np.ma.masked_all(shape, out.dtype), iter(out)
             for ij, sim in np.ndenumerate(sims_array):
                 # even if get_sim() -> None, call self for consistency
-                # with non-vectorized (e.g., about masked vs default)
+                # with non-vectorized (e.g., regarding masked/default)
                 out[ij] = next(out_it) if sim else self(sim, **kwds)
         else:
             # if sims is a masked array, we preserve the mask, even if trivial
