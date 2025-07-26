@@ -475,7 +475,7 @@ class Measure(Function):
     #     # simultaneously, it must be done by the function
     #     # passed to vectorized ...
     #     super().__init__(func, key, label, **attrs)  # set __name__
-    #     func = sim_or_uid_arg(cached(func, self.__name__))  # enable chaching
+    #     func = sim_like_arg(cached(func, self.__name__))  # enable chaching
     #     super().__init__(func, key, label)  # update func
     #     self._vect = np.vectorize(self.func, otypes=otypes, signature=signature)
 
