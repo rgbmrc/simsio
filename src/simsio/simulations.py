@@ -209,6 +209,13 @@ class Simulation(Cache):
     # alternative: __len__ = None, but bool() breaks (and possibly other stuff as well)
     __array_interface__ = {"shape": (), "typestr": "O"}
 
+    def __eq__(self, other):
+        # implies self.uid == self, to distinguish use "is"
+        return self.uid == getattr(other, "uid", other)
+
+    def __lt__(self, other):
+        return self.uid < getattr(other, "uid", other)
+
     def __repr__(self):
         args = f"{self.uid!r}, readonly={self.readonly!r}"
         return f"{type(self).__name__}({args}){set(self)}"
