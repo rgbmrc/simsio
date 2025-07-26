@@ -109,10 +109,10 @@ def get_sim(sim_or_uid):
     ValueError, TypeError
         If sim_or_uid is neither null nor invalid.
     """
-    if isinstance(sim_or_uid, Simulation) or sim_or_uid is masked:
-        return sim_or_uid  # OPT should we still insert in registry?
     # handle scalar array, e.g. from iterating over xarray.DataArray
     sim_or_uid = as_scalar(sim_or_uid)  # raises ValueError for non-scalar
+    if isinstance(sim_or_uid, Simulation) or sim_or_uid is masked:
+        return sim_or_uid  # OPT should we still insert in registry?
     # None and "" evaluate to False, but nan (xarray's masked) doesn't
     # check before initializing the Simulation, which may:
     # generate a dummy uid (None) or raise TypeError (nan)
