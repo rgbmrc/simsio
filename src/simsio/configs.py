@@ -251,21 +251,25 @@ class SimsQuery:
     def __init__(self, *group_globs, valid_uuid=True, select=None):
         self.group_globs = group_globs or ["**/*"]
         self.valid_uuid = valid_uuid
+        self.select = select
+
+    @cached_property
+    def groups(self):
         if self.valid_uuid:
             # hardcoded default for backward compatibility with old .simsiorc files
             # DEL when default rc file is deployed
             uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
-            uid_filter = re.compile(uuid_regex, re.S).fullmatch
+            select = re.compile(uuid_regex, re.S).fullmatch
         else:
-            uid_filter = rc["configs"]["header_tag"].__ne__
-        self.groups = {
-            path_to_group(p): set(filter(uid_filter, cfg))
+            select = rc["configs"]["header_tag"].__ne__
+        if self.select is not None:
+            select = lambda u: select(u) and self.select(u)  # noqa: E731
+        # keeps any config that maches a glob, even if no selected uids
+        return {
+            path_to_group(p): [*filter(select, yamlsf.load(p) or [])]
             for glob in self.group_globs
             for p in cfg_glob(glob)
-            if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
         }
-        if select is not None:
-            self.groups = {k: set(filter(select, us)) for k, us in self.groups.items()}
 
     @cached_property
     def uids(self):
