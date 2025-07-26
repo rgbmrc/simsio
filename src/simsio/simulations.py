@@ -204,6 +204,11 @@ class Simulation(Cache):
         if not self.readonly and self.cfg_path:
             cfg_update_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
 
+    # prevent numpy from iterating over self, but might be removed:
+    # https://numpy.org/devdocs/reference/arrays.interface.html#object.__array_interface__
+    # alternative: __len__ = None, but bool() breaks (and possibly other stuff as well)
+    __array_interface__ = {"shape": (), "typestr": "O"}
+
     def __repr__(self):
         args = f"{self.uid!r}, readonly={self.readonly!r}"
         return f"{type(self).__name__}({args}){set(self)}"
