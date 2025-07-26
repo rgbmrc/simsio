@@ -1,44 +1,41 @@
 import logging
-from itertools import starmap
+from warnings import warn
 
 import numpy as np
 import xarray as xr
 
-from simsio.configs import sims_or_group_arg
 from simsio.analysis.quantitites import Measure
-from simsio.simulations import get_sim
+from simsio.simulations import get_sim, sims_iter_like_arg, Simulation
 
 __all__ = ["uids_grid", "uids_sort"]
 
 logger = logging.getLogger(__name__)
+np.set_printoptions(formatter={"object": str})
 
 
-def get_params_vals(sims, keys):
-    try:
-        sims = sims.items()
-    except AttributeError:
-        sims = ((s,) for s in sims)
-    keys = [Measure.get(k) for k in keys]
-    vals = [[k(sim) for k in keys] for sim in starmap(get_sim, sims)]
-    return keys, tuple(zip(*vals))
+get_sims_array = np.frompyfunc(get_sim, 1, 1)
 
 
-@sims_or_group_arg
+def _get_sims_attrs(sims, keys):
+    return {k: k(sims) for k in map(Measure.get, keys)}
+
+
+@sims_iter_like_arg
 def uids_grid(sims, keys) -> xr.DataArray:
-    # NOTE why returning array of strings and not Simulation objects?
-    # among other reasons:
-    # https://github.com/numpy/numpy/issues/27212#issue-2465378354
-    keys, vals = get_params_vals(sims, keys)
-    idxs = np.empty((len(keys), len(sims)), dtype=np.intp)
-    uniq = {}
-    for j, (k, v) in enumerate(zip(keys, vals)):
-        u, i = np.unique(v, return_inverse=True)
-        uniq[k] = u
-        idxs[j] = i
-    shape = tuple(map(len, uniq.values()))
+    sims = np.fromiter(sims, object)  # does not iterate over sim dict
+    inds = np.empty((len(keys), len(sims)), dtype=np.intp)
+    coords = {}
+    for j, (k, vs) in enumerate(_get_sims_attrs(sims, keys).items()):
+        coords[k], inds[j] = np.unique(vs, return_inverse=True)
+    # could call unique on vals directly (as for lexsort in uids_sort)
+    # but we need coords anyway and then unique is faster on inds
+    inds, js, counts = np.unique(inds, axis=1, return_index=True, return_counts=True)
+    if dupl := np.sum(counts - 1):
+        warn(f"discarded {dupl} simulations with duplicate coords")
+    shape = tuple(map(len, coords.values()))
     grid = np.empty(shape, dtype=object)
-    for i, s in zip(idxs.T, sims):
-        grid[tuple(i)] = getattr(s, "uid", s)
+    for i, j in zip(inds.T, js):
+        grid[*i] = sims[j]  # fancy indexing on grid would trigger copy
     # xarray works best with string names
     # https://docs.xarray.dev/en/stable/user-guide/terminology.html#term-name
     # we can also keep the (hashable) Measure objects as duplicate coords
@@ -46,28 +43,25 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
     # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
-    return xr.DataArray(grid, uniq.values(), tuple(k.name for k in keys))
+    return xr.DataArray(grid, coords.values(), tuple(k.name for k in keys))
 
 
-@sims_or_group_arg
-def uids_sort(sims, keys, return_vals=False):
+@sims_iter_like_arg
+def uids_sort(
+    sims, keys, return_vals=False
+) -> list[Simulation] | tuple[list[Simulation], list[tuple]]:
     """Sorts a set of uids in lexicographic order according to the values of the given
     parmeters."""
-    keys, vals = get_params_vals(sims, keys)
-    idxs = np.lexsort(vals[::-1])
-    sims = list(sims)  # need __getitem__
-    sims = [sims[i] for i in idxs]
+    sims = np.fromiter(sims, object)  # avoid array creation for every measure
+    params = _get_sims_attrs(sims, keys)
+    vals = tuple(params.values())
+    inds = np.lexsort(vals[::-1])
+    sims = sims[inds].tolist()  # return list, more flexible
     if return_vals:
         vals = tuple(zip(*vals))
-        vals = [vals[i] for i in idxs]
+        vals = [vals[i] for i in inds]
         return sims, vals
     return sims
-
-
-def mask_grid(grid, cond, drop=False):
-    # register a "simsio" accessor instead?
-    # https://docs.xarray.dev/en/stable/internals/extending-xarray.html
-    return grid.where(cond, "", drop=drop)
 
 
 @xr.register_dataarray_accessor("simsio")

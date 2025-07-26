@@ -13,6 +13,7 @@
  par  | params   | I/O | txt | options used by routines and classes
  dat  | data     | I/O | bin | any persistent object, all the above included
  cfg  | config   | I   | txt | subset of par provided as user input
+
 """
 
 import logging
@@ -22,7 +23,7 @@ import sys
 import time
 import uuid
 from cmath import isnan  # cmath just to be extra safe
-from functools import wraps
+from functools import wraps, partial
 from string import Template
 from subprocess import run
 
@@ -30,7 +31,7 @@ import dictdiffer
 import dpath
 from numpy.ma import masked  # numpy dependency :(
 
-from simsio.configs import cfg_load, cfg_update_uid
+from simsio.configs import cfg_load, cfg_update_uid, SimsQuery
 from simsio.iocore import Cache
 from simsio.settings import rc
 from simsio.utils import as_scalar
@@ -38,7 +39,8 @@ from simsio.utils import as_scalar
 __all__ = [
     "Simulation",
     "get_sim",
-    "sim_or_uid_arg",
+    "sim_like_arg",
+    "sims_iter_like_arg",
     "purge_registry",
     "purge_caches",
     "valid_uuid",
@@ -71,6 +73,7 @@ def valid_uuid(uid=None, raise_invalid=False):
     ------
     ValueError
         If raise_invalid and uid is not a valid UUID.
+
     """
     try:
         uid = uuid.UUID(uid, version=1)
@@ -108,6 +111,7 @@ def get_sim(sim_or_uid):
     ------
     ValueError, TypeError
         If sim_or_uid is neither null nor invalid.
+
     """
     # handle scalar array, e.g. from iterating over xarray.DataArray
     sim_or_uid = as_scalar(sim_or_uid)  # raises ValueError for non-scalar
@@ -125,12 +129,27 @@ def get_sim(sim_or_uid):
     return sim_registry[sim_or_uid]
 
 
-def sim_or_uid_arg(fun_sim):
+def sim_like_arg(fun_sim):
     @wraps(fun_sim)
     def fun_sim_or_uid(sim, *args, **kwargs):
         return fun_sim(get_sim(sim), *args, **kwargs)
 
     return fun_sim_or_uid
+
+
+def sims_iter_like_arg(func_sims=None, expand=False):
+    if func_sims is None:
+        return partial(sims_iter_like_arg, expand=expand)
+
+    @wraps(func_sims)
+    def func_cast(sims_like, *args, **kwargs):
+        # TODO support sims_like collection (iterable? nah) of sims-like
+        # (globs, iterable of uids)? note that we cannot use *sims_like
+        if isinstance(sims_like, str):
+            sims_like = SimsQuery(sims_like)
+        return func_sims([*sims_like] if expand else sims_like, *args, **kwargs)
+
+    return func_cast
 
 
 class Simulation(Cache):

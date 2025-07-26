@@ -8,7 +8,7 @@ __all__ = [
     "Simulation",
     "SimsQuery",
     "get_sim",
-    "sim_or_uid_arg",
-    "sims_or_group_arg",
+    "sim_like_arg",
+    "sims_iter_like_arg",
     "run_sim",
 ]

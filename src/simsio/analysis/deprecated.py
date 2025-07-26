@@ -1,9 +1,9 @@
 import re
 import dpath
-from simsio.simulations import sim_or_uid_arg
+from simsio.simulations import sim_like_arg
 
 
-@sim_or_uid_arg
+@sim_like_arg
 def extract_text(sim, key, regex, reverse=False, op="search"):
     d = sim[key]
     if reverse:
@@ -11,7 +11,7 @@ def extract_text(sim, key, regex, reverse=False, op="search"):
     return getattr(re.compile(regex), op)(d)
 
 
-@sim_or_uid_arg
+@sim_like_arg
 def extract_dict(sim, key, glob, op=None):
     op = op or dpath.get
     return op(sim[key], glob)

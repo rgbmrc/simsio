@@ -3,7 +3,7 @@ import logging
 import re
 from collections import defaultdict, deque
 from contextlib import contextmanager
-from functools import cached_property, wraps
+from functools import cached_property
 from itertools import chain, product
 from pathlib import Path
 from shutil import rmtree
@@ -18,7 +18,6 @@ from simsio.settings import rc
 
 __all__ = [
     "SimsQuery",
-    "sims_or_group_arg",
     "cfg_glob",
     "path_to_group",
     "group_to_path",
@@ -64,6 +63,7 @@ def cfg_glob(pattern=None, cron=False):
     -------
     list[Path]
         Paths of matching config files, ordered chronologically, from the most recently used process
+
     """
     pattern = (pattern or "**/*") + CFG_EXT
     paths = get_cfg_dir().glob(pattern)
@@ -235,16 +235,6 @@ def cfg_gen(template, params, glob=None):
             uids |= set(c)
         yamlrt.dump(configs, path)
     return generated
-
-
-def sims_or_group_arg(func_sims):
-    @wraps(func_sims)
-    def func_sims_or_group(sims_or_group, *args, **kwargs):
-        if isinstance(sims_or_group, str):
-            sims_or_group = SimsQuery(sims_or_group)
-        return func_sims(sims_or_group, *args, **kwargs)
-
-    return func_sims_or_group
 
 
 class SimsQuery:
