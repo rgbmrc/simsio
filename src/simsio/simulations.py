@@ -213,6 +213,13 @@ class Simulation(Cache):
         args = f"{self.uid!r}, readonly={self.readonly!r}"
         return f"{type(self).__name__}({args}){set(self)}"
 
+    def __str__(self):
+        return self.uid
+
+    def _repr_html_(self):
+        path = self.handles["par"].storage
+        return f'<tt><a href="{path}">{self.uid}</a></tt>'
+
     def __getattribute__(self, name):
         if name in rc["IO-handlers"]:
             return self[name]
