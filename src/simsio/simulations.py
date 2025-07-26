@@ -154,7 +154,7 @@ class Simulation(Cache):
 
         for key in rc["IO-handlers"]:
             if key != "dat":
-                self.link(key)
+                self.link(key)  # setattr as well?
 
         # setup logging
         if not readonly:
@@ -226,12 +226,6 @@ class Simulation(Cache):
     def _repr_html_(self):
         path = self.handles["par"].storage
         return f'<tt><a href="{path}">{self.uid}</a></tt>'
-
-    def __getattribute__(self, name):
-        if name in rc["IO-handlers"]:
-            return self[name]
-        else:
-            return super().__getattribute__(name)
 
     def __copy__(self):
         new = super().__copy__()
