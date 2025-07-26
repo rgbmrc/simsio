@@ -50,8 +50,8 @@ def uids_grid(sims, keys) -> xr.DataArray:
 def uids_sort(
     sims, keys, return_vals=False
 ) -> list[Simulation] | tuple[list[Simulation], list[tuple]]:
-    """Sorts a set of uids in lexicographic order according to the values of the given
-    parmeters."""
+    """Sorts a set of uids in lexicographic order according to the values of
+    the given parmeters."""
     sims = np.fromiter(sims, object)  # avoid array creation for every measure
     params = _get_sims_attrs(sims, keys)
     vals = tuple(params.values())

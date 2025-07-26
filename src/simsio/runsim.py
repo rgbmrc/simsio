@@ -24,8 +24,7 @@ ARG_DELIM = "--"
 
 
 def set_num_threads(num):
-    """
-    Tries setting OpenMP number of threads to `num`.
+    """Tries setting OpenMP number of threads to `num`.
 
     Parameters
     ----------
@@ -34,6 +33,7 @@ def set_num_threads(num):
     Returns
     -------
     success : bool
+
     """
     libraries = (
         "libiomp5.so",

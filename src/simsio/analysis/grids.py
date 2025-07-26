@@ -23,8 +23,7 @@ class Grid:
 
 
 class LinGrid(Grid):
-    """
-    1-dimensional grid of evenly spaced points.
+    """1-dimensional grid of evenly spaced points.
 
     Uniform partition of an interval [a, b] in n subintervals.
     Each grid point corresponds to the center of one subinterval.
@@ -59,6 +58,7 @@ class LinGrid(Grid):
         Array [a, b] of the lower and upper extramals of the interval.
     periodic : bool
         Topology of the interval: open segment or closed ring.
+
     """
 
     def __init__(
@@ -94,19 +94,18 @@ class LinGrid(Grid):
         )
 
     def points(self):
-        """
-        Returns the grid points.
+        """Returns the grid points.
 
         Returns
         -------
         numpy.ndarray
             Grid points, namely centers of the subintervals of the partition.
+
         """
         return np.linspace(*(self.extent + self.step / 2), self.n, endpoint=False)
 
     def index(self, val, weights=False):
-        """
-        Returns the index(es) for evaluating fields living on the grid.
+        """Returns the index(es) for evaluating fields living on the grid.
 
         If the grid is periodic, indices are treated modulo n;
         otherwise ValueError is raised if val is outside the interval.
@@ -125,6 +124,7 @@ class LinGrid(Grid):
             * index `i` of the grid point closest to val (index of the subinterval containing val); or
             * indices `is` of the two closest points to val & weights `ws` such that:
             `numpy.inner(points()[is], ws) == val`.
+
         """
         if (
             not self.periodic
@@ -147,9 +147,8 @@ class LinGrid(Grid):
             ) % self.n
 
     def rgflow(self, factor):
-        """
-        Builds a grid corresponding to the renormalization group flow of the current
-        one.
+        """Builds a grid corresponding to the renormalization group flow of
+        the current one.
 
         Parameters
         ----------
@@ -161,14 +160,14 @@ class LinGrid(Grid):
         -------
         Grid1D
             A new grid corresponding to the RG transformation of the current one.
+
         """
         if factor == 1:
             return self
         return Grid1D(n=round(self.n / factor), extent=self.extent)
 
     def dual(self, extremals=True):
-        """
-        Builds a dual grid, whose points are the current partition bounds.
+        """Builds a dual grid, whose points are the current partition bounds.
 
         Extremals can be discarded.
 
@@ -181,6 +180,7 @@ class LinGrid(Grid):
         -------
         Grid1D
             A new grid, whose points are the bounds of the subintervals of the current grid.
+
         """
         # TODO: handle periodicity, e.g. for building momentum space of a real space
         return Grid1D(
@@ -194,8 +194,8 @@ class LinGrid(Grid):
         # TODO: this is not unique! e.g.:
         # 3>2>8, 3>4>8, 3>9>8 are all valid
         # with larger numbers problems less likely (?)
-        """
-        Broadcasts the current grid to a new one with the given number of points.
+        """Broadcasts the current grid to a new one with the given number of
+        points.
 
         Broadcasting is achieved via a duality and an eventual subsequent RG transformation.
 
@@ -208,6 +208,7 @@ class LinGrid(Grid):
         -------
         Grid1D
             A new grid, with n points, obtained broadcasting the current one.
+
         """
 
         def _rgfactor(n_new, n_old):

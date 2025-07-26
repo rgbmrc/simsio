@@ -1,5 +1,4 @@
-"""
-**Abbreviations**
+"""**Abbreviations**
 
  - sim: simulation
  - uid: simulation identifier (human provided key or computer generated uuid)
@@ -53,8 +52,8 @@ sim_registry = {}
 
 
 def valid_uuid(uid=None, raise_invalid=False):
-    """
-    Returns and/or check the validity of a UUID (universally unique identifier).
+    """Returns and/or check the validity of a UUID (universally unique
+    identifier).
 
     Parameters
     ----------
@@ -101,8 +100,8 @@ def purge_caches(keys=None):
 
 
 def get_sim(sim_or_uid):
-    """
-    Retreives a simulation from the register, building it if not already present.
+    """Retreives a simulation from the register, building it if not already
+    present.
 
     The eventual Simulation initialization uses default arguments (except for group, if
     provided).

@@ -47,8 +47,7 @@ _config_path_history = deque(maxlen=100)
 
 
 def cfg_glob(pattern=None, cron=False):
-    """
-    Returns the paths of config files matching a glob.
+    """Returns the paths of config files matching a glob.
 
     Parameters
     ----------
