@@ -97,7 +97,7 @@ def purge_caches(keys=None):
         s.purge_cache(keys)
 
 
-def get_sim(sim_or_uid, group=None):
+def get_sim(sim_or_uid):
     """
     Retreives a simulation from the register, building it if not already present.
 
@@ -120,7 +120,7 @@ def get_sim(sim_or_uid, group=None):
     if not sim_or_uid or not isinstance(sim_or_uid, str) and isnan(sim_or_uid):
         return
     if sim_or_uid not in sim_registry:
-        sim_registry[sim_or_uid] = Simulation(sim_or_uid, group)
+        sim_registry[sim_or_uid] = Simulation(sim_or_uid)
         logger.debug(f"Cached simulation {sim_or_uid}")
     return sim_registry[sim_or_uid]
 
