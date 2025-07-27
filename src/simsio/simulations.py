@@ -146,7 +146,8 @@ def sims_iter_like_arg(func_sims=None, expand=False):
         # (globs, iterable of uids)? note that we cannot use *sims_like
         if isinstance(sims_like, str):
             sims_like = SimsQuery(sims_like)
-        return func_sims([*sims_like] if expand else sims_like, *args, **kwargs)
+        sims = map(get_sim, sims_like)
+        return func_sims([*sims] if expand else sims, *args, **kwargs)
 
     return func_cast
 
