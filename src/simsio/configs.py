@@ -252,7 +252,8 @@ class SimsQuery:
         else:
             select = rc["configs"]["header_tag"].__ne__
         if self.select is not None:
-            select = lambda u: select(u) and self.select(u)  # noqa: E731
+            valid_uuid = select  # keep reference, otherwise recursive select
+            select = lambda u: valid_uuid(u) and self.select(u)  # noqa: E731
         # keeps any config that maches a glob, even if no selected uids
         return {
             path_to_group(p): [*filter(select, yamlsf.load(p) or [])]
