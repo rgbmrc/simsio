@@ -5,9 +5,8 @@ import operator
 import re
 from collections import defaultdict
 from copy import deepcopy
-from functools import partial, reduce
+from functools import partial
 from itertools import chain
-from operator import matmul
 from typing import Callable, Self
 
 import dpath
@@ -391,40 +390,18 @@ class Function:
 
     @classmethod
     def from_path(cls, path, **kwds):
-        kwds.setdefault("key", path)
-        func = lambda sim: dpath.get(
-            sim, path, default=kwds.get("default", _DEFAULT_SENTINEL)
-        )
+        kwds.setdefault("name", path)
+        default = kwds.get("default", _DEFAULT_SENTINEL)
+        func = lambda sim: dpath.get(sim, path, default=default)
         return cls(func, **kwds)
-
-    @classmethod
-    def from_string(cls, name_or_path):
-        raise NotImplementedError()
-        if not isinstance(name_or_path, str):
-            raise TypeError()
-        try:
-            return cls._register[name_or_path]
-        except KeyError:
-            return cls(
-                func=lambda sim: dpath.get(
-                    sim,
-                    glob=name_or_path,
-                    default=dpath._DEFAULT_SENTINEL,
-                ),
-                name=name_or_path,
-            )
-
-    @classmethod
-    def from_register(cls, key):
-        raise NotImplementedError()
-        segments = key.split("@")
-        func = reduce(matmul, (Function._register[s] for s in segments))
-        return cls.from_callable(func)
 
     @classmethod
     def get(cls, func_like):
         if isinstance(func_like, str):
-            return cls.from_path(func_like)
+            try:
+                return cls._register[func_like]
+            except KeyError:
+                return cls.from_path(func_like)
         return cls.from_callable(func_like)
 
     def string(self, x=None, val=_DEFAULT_SENTINEL, fmt="", sep=None, math=None):
