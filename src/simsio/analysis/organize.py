@@ -5,7 +5,8 @@ import numpy as np
 import xarray as xr
 
 from simsio.analysis.quantitites import Measure
-from simsio.simulations import get_sim, sims_iter_like_arg, Simulation
+from simsio.configs import SimsQuery
+from simsio.simulations import get_sim, get_sims_iter, sims_iter_like_arg, Simulation
 
 __all__ = ["uids_grid", "uids_sort"]
 
@@ -20,9 +21,15 @@ def _get_sims_attrs(sims, keys):
     return {k: k(sims) for k in map(Measure.get, keys)}
 
 
-@sims_iter_like_arg
 def uids_grid(sims, keys) -> xr.DataArray:
-    sims = np.fromiter(sims, object)  # does not iterate over sim dict
+    match sims:
+        case str():
+            group = sims
+        case SimsQuery():
+            group = sims.group_globs[0]
+        case _:
+            group = None
+    sims = np.fromiter(get_sims_iter(sims), object)  # does not iterate over sim dict
     inds = np.empty((len(keys), len(sims)), dtype=np.intp)
     coords = {}
     for j, (k, vs) in enumerate(_get_sims_attrs(sims, keys).items()):
@@ -43,7 +50,7 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
     # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
-    return xr.DataArray(grid, coords.values(), tuple(k.name for k in keys))
+    return xr.DataArray(grid, coords.values(), tuple(k.name for k in keys), group)
 
 
 @sims_iter_like_arg
