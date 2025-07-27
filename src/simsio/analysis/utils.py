@@ -3,6 +3,12 @@ import numpy as np
 __all__ = ["is_numeric", "as_ndarray"]
 
 
+def sanitize_path(s):
+    # TODO platform dependent, improve, see https://stackoverflow.com/q/295135
+    # FIXME name-collisions possible due to 128 char limit
+    return s.replace(":", "!").replace("/", "_")[:128]
+
+
 def is_numeric(val):
     return np.issubdtype(np.asanyarray(val).dtype, np.number)
 

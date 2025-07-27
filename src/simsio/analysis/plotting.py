@@ -11,6 +11,7 @@ from matplotlib import colors, ticker, cm
 from simsio.analysis.quantitites import Function, Measure
 from simsio.analysis.grids import Grid1D, bin_edges
 from simsio.analysis.numpy_extras import append_til_ndim
+from simsio.analysis.utils import sanitize_path
 
 __all__ = [
     "grid_titles",
@@ -376,8 +377,7 @@ def join_obs_names(*obs, sep=",", junc="_vs_"):
 
 
 def sanitize_fig_name(fig):
-    # TODO platform dependent, improve
-    fig.set_label(fig.get_label().replace(":", "!").replace("/", "_")[:128])  # FIXME
+    fig.set_label(sanitize_path(fig.get_label()))
 
 
 def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):

@@ -99,7 +99,7 @@ def purge_caches(keys=None):
         s.purge_cache(keys)
 
 
-def get_sim(sim_or_uid):
+def get_sim(sim_like):
     """Retreives a simulation from the register, building it if not already
     present.
 
@@ -113,19 +113,27 @@ def get_sim(sim_or_uid):
 
     """
     # handle scalar array, e.g. from iterating over xarray.DataArray
-    sim_or_uid = as_scalar(sim_or_uid)  # raises ValueError for non-scalar
-    if isinstance(sim_or_uid, Simulation) or sim_or_uid is masked:
-        return sim_or_uid  # OPT should we still insert in registry?
+    sim_like = as_scalar(sim_like)  # raises ValueError for non-scalar
+    if isinstance(sim_like, Simulation) or sim_like is masked:
+        return sim_like  # OPT should we still insert in registry?
     # None and "" evaluate to False, but nan (xarray's masked) doesn't
     # check before initializing the Simulation, which may:
     # generate a dummy uid (None) or raise TypeError (nan)
     # NOTE isnan may raise TypeError, should we let Simulation() validate?
-    if not sim_or_uid or not isinstance(sim_or_uid, str) and isnan(sim_or_uid):
+    if not sim_like or not isinstance(sim_like, str) and isnan(sim_like):
         return
-    if sim_or_uid not in sim_registry:
-        sim_registry[sim_or_uid] = Simulation(sim_or_uid)
-        logger.debug(f"Cached simulation {sim_or_uid}")
-    return sim_registry[sim_or_uid]
+    if sim_like not in sim_registry:
+        sim_registry[sim_like] = Simulation(sim_like)
+        logger.debug("Cached simulation %s", sim_like)
+    return sim_registry[sim_like]
+
+
+def get_sims_iter(sims_like):
+    # TODO support sims_like collection (iterable? nah) of sims-like
+    # (globs, iterable of uids)? note that we cannot use *sims_like
+    if isinstance(sims_like, str):
+        sims_like = SimsQuery(sims_like)
+    return map(get_sim, sims_like)
 
 
 def sim_like_arg(fun_sim):
@@ -142,11 +150,7 @@ def sims_iter_like_arg(func_sims=None, expand=False):
 
     @wraps(func_sims)
     def func_cast(sims_like, *args, **kwargs):
-        # TODO support sims_like collection (iterable? nah) of sims-like
-        # (globs, iterable of uids)? note that we cannot use *sims_like
-        if isinstance(sims_like, str):
-            sims_like = SimsQuery(sims_like)
-        sims = map(get_sim, sims_like)
+        sims = get_sims_iter(sims_like)
         return func_sims([*sims] if expand else sims, *args, **kwargs)
 
     return func_cast
