@@ -8,7 +8,7 @@ from simsio.analysis.quantitites import Measure
 from simsio.configs import SimsQuery
 from simsio.simulations import get_sim, get_sims_iter, sims_iter_like_arg, Simulation
 
-__all__ = ["uids_grid", "uids_sort"]
+__all__ = ["get_sims_array", "uids_grid", "uids_sort", "stack_grids"]
 
 logger = logging.getLogger(__name__)
 np.set_printoptions(formatter={"object": str})
@@ -81,3 +81,20 @@ class UIDSGrid:
         val = np.unique(obs(self._obj))
         assert val.size == 1
         return self._obj.expand_dims({obs.name: val}, axis)
+
+
+def stack_grids(grids, axis=0, dim=None, **concat_kwds):
+    if axis not in {0, -1}:
+        raise ValueError("axis must be 0 or -1")
+    existing_dims = {d for gr in grids for d in gr.dims}
+    if not dim:
+        i, dim = 0, "stack"
+        while dim in existing_dims:
+            i += 1
+            dim = f"stack_{i}"
+    else:
+        assert dim not in existing_dims
+    grid = xr.concat(grids, dim, **concat_kwds)
+    if axis == -1:
+        grid = grid.transpose(..., dim)
+    return grid.reset_coords(drop=True)
