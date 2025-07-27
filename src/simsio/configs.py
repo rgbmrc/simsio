@@ -238,7 +238,7 @@ def cfg_gen(template, params, glob=None):
 
 class SimsQuery:
     def __init__(self, *group_globs, valid_uuid=True, select=None):
-        self.group_globs = group_globs or ["**/*"]
+        self.group_globs = group_globs or [None]
         self.valid_uuid = valid_uuid
         self.select = select
 
