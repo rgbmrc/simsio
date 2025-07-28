@@ -16,7 +16,6 @@
 """
 
 import logging
-import logging.config
 import shlex
 import sys
 import time
@@ -33,7 +32,7 @@ from numpy.ma import masked  # numpy dependency :(
 from simsio.configs import cfg_load, cfg_update_uid, SimsQuery
 from simsio.iocore import Cache
 from simsio.settings import rc
-from simsio.utils import as_scalar
+from simsio.utils import as_scalar, setup_logging
 
 __all__ = [
     "Simulation",
@@ -181,7 +180,7 @@ class Simulation(Cache):
 
         # setup logging
         if not readonly:
-            self.setup_logging()
+            setup_logging(self.handles["log"].storage)
             logger.info("Running %s", shlex.join(sys.argv))
 
         # handle readonly uninitiazlized simulation
@@ -284,34 +283,6 @@ class Simulation(Cache):
 
         self["par"] |= info
         return info
-
-    def setup_logging(self):
-        """Setup logging."""
-
-        levels = rc["logging-levels"]
-        format = rc["logging-format"]
-        handlers = {}
-        handlers["console"] = {
-            "class": "logging.StreamHandler",
-            "stream": "ext://sys.stdout",
-        }
-        handlers["file"] = {
-            "class": "logging.FileHandler",
-            "filename": self.handles["log"].storage,
-            # TODO: public access to storage
-        }
-        for h in handlers.values():
-            h["formatter"] = "fmt"
-        loggingrc = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {"fmt": dict(format)},
-            "handlers": handlers,
-            "loggers": {k: {"level": l} for k, l in levels.items()},
-            "root": {"handlers": list(handlers)},
-        }  # yapf: disable
-        logging.config.dictConfig(loggingrc)
-        logging.captureWarnings(True)
 
     def link(self, key, **link_kw):
         # TODO:
