@@ -392,17 +392,24 @@ class Function:
     def from_path(cls, path, **kwds):
         kwds.setdefault("name", path)
         default = kwds.get("default", _DEFAULT_SENTINEL)
-        func = lambda sim: dpath.get(sim, path, default=default)
+        func = partial(dpath.get, glob=path, default=default)
         return cls(func, **kwds)
 
     @classmethod
     def get(cls, func_like):
+        if func_like is None:  # TODO same for masked/nan?
+            return
         if isinstance(func_like, str):
             try:
                 return cls._register[func_like]
             except KeyError:
                 return cls.from_path(func_like)
         return cls.from_callable(func_like)
+
+    @classmethod
+    def get_array(cls, func_like):
+        # OPT avoid np.frompyfunc every time? mah, it's fast
+        return np.frompyfunc(cls.get, 1, 1)(func_like)
 
     def string(self, x=None, val=_DEFAULT_SENTINEL, fmt="", sep=None, math=None):
         l = self.label
@@ -434,8 +441,6 @@ class Function:
 
 
 class Measure(Function):
-    _register = {}
-
     def __init__(self, func, _from=None, **attrs):
         self.cached = True
         self.filter = None
