@@ -1,5 +1,6 @@
 import logging
 from copy import copy, deepcopy
+from functools import partial
 from itertools import filterfalse
 
 import matplotlib.pyplot as plt
@@ -10,6 +11,7 @@ from matplotlib import colors, ticker, cm
 
 from simsio.analysis.quantitites import Function, Measure
 from simsio.analysis.grids import Grid1D, bin_edges
+from simsio.analysis.organize import nest_grids
 from simsio.analysis.numpy_extras import append_til_ndim
 from simsio.analysis.utils import sanitize_path
 
@@ -35,6 +37,11 @@ TILE_SIZE = 1.33
 AXES_PAD = 0.1
 CBAR_SIZE = 0.1
 MAX_DIGITIZED = 12
+
+REPORT_1D_DIMS = ["row", "col", "cycler", "cmap"]
+REPORT_2D_DIMS = ["row", "col"]
+nest_1d_grids = partial(nest_grids, prepend=REPORT_1D_DIMS, concat_dim="dat")
+nest_2d_grids = partial(nest_grids, prepend=REPORT_2D_DIMS, concat_dim="dat")
 
 
 def fix_mfc(l):  # TODO move to mplotter
@@ -227,6 +234,7 @@ def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
 def report_2d(
     ug,
     obs,
+    *,
     y_titles=None,
     x_titles=None,
     x_obs=None,
@@ -238,8 +246,29 @@ def report_2d(
     fig=None,
     **grid_kwds,
 ):
+    try:
+        xg = nest_2d_grids(ug)
+    except TypeError:
+        pass
+    else:
+        ug = xg.to_masked_array(copy=False)
+        # TODO support inverse operation: use args to transpose xg
+        grid_dim = dict(enumerate(xg.dims)).get
+        y_titles = y_titles or grid_dim(0)
+        x_titles = x_titles or grid_dim(1)
+        # TODO cannot infer from xg: we don't know what obs does with dims 2,3,...
+        # y_obs = y_obs or grid_dim(2)
+        # x_obs = x_obs or grid_dim(3)
+
     im_kwds = im_kwds or {}
-    obs_ndim = np.ndim(obs)
+    obs = Function.get_array(obs)
+    # TODO support array of...
+    x_obs = Function.get(x_obs)
+    y_obs = Function.get(y_obs)
+    # only need this in grid_titles (which already calls get_array)
+    # x_titles = Function.get_array(x_titles)
+    # y_titles = Function.get_array(y_titles)
+    obs_ndim = obs.ndim
     iter_arrays = (ug, obs)
     ndim = max(2, *(np.ndim(a) for a in iter_arrays))
     iter_arrays = (ug, obs) = [append_til_ndim(a, ndim) for a in iter_arrays]
@@ -399,7 +428,7 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
             obs_titles = [o.string() for o in obs[:, 0]]
     ug_titles = []
     if title is not None:
-        title = np.atleast_1d(title)
+        title = np.atleast_1d(Function.get_array(title))
         ug = np.ma.masked_equal(ug, "")
         # TODO mixed Function/Measure?
         if isinstance(title.item(0), Measure):

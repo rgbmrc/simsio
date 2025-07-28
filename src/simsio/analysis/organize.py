@@ -1,5 +1,6 @@
 import logging
 from warnings import warn
+from typing import Hashable
 
 import numpy as np
 import xarray as xr
@@ -50,7 +51,7 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
     # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
-    return xr.DataArray(grid, coords.values(), tuple(k.name for k in keys), group)
+    return xr.DataArray(grid, coords.values(), tuple(k.name for k in coords), group)
 
 
 @sims_iter_like_arg
@@ -98,3 +99,42 @@ def stack_grids(grids, axis=0, dim=None, **concat_kwds):
     if axis == -1:
         grid = grid.transpose(..., dim)
     return grid.reset_coords(drop=True)
+
+
+def _nested_grid_depth(grid):
+    if isinstance(grid, xr.DataArray):
+        return 0
+    return 1 + max(_nested_grid_depth(x) for x in grid)
+
+
+def nest_grids(
+    nested: list,
+    *,
+    prepend: list[str | Hashable] = None,
+    concat_dim: str | Hashable = None,
+    **combine_kwargs,
+) -> xr.DataArray:
+    """Stacks a nested list of DataArrays.
+
+    Parameters
+    ----------
+        nested
+            Arbitrarily nested list of xarray.DataArray objects.
+        prepend
+            Leading dimensions to insert; once exhausted use concat_dim.
+        concat_dim
+            After prepend, new dimensions will be `{concat_dim}_{i}`
+            where `i` is the dimension index. Default: "grid_dim".
+        **combine_kwargs
+            Keyword args for xarray.combine_nested (excluding concat_dim).
+
+    Returns
+    -------
+    A single xarray.DataArray with new leading dimensions.
+
+    """
+    concat_dim = concat_dim or "grid_dim"
+    ndim = _nested_grid_depth(nested)
+    dims = (prepend or [])[:ndim]
+    dims.extend(f"{concat_dim}_{i}" for i in range(len(dims), ndim))
+    return xr.combine_nested(nested, dims, **combine_kwargs).transpose(*dims, ...)
