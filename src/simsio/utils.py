@@ -1,4 +1,5 @@
 import logging
+import logging.config
 from importlib import import_module
 
 from simsio.settings import rc
