@@ -9,7 +9,7 @@ import matplotlib as mpl
 import mpl_toolkits.axes_grid1 as axg
 from matplotlib import colors, ticker, cm
 
-from simsio.analysis.quantitites import Function, Measure
+from simsio.analysis.quantities import Function, Measure
 from simsio.analysis.grids import Grid1D, bin_edges
 from simsio.analysis.organize import nest_grids
 from simsio.analysis.numpy_extras import append_til_ndim
