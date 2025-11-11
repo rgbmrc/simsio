@@ -128,7 +128,7 @@ class Function:
         # 5. override everything
         self.func = func
         if isinstance(self.label, Function):
-            self.label = self.label.func  # avoid "partialization"
+            self.label = self.label.func  # avoid "partial"
         assert self.name not in self.INVALID_NAMES
         if self.name in self._register:
             registered_self = self._register[self.name]

@@ -1,0 +1,24 @@
+{
+    "version": "0.2",
+    "ignorePaths": [],
+    "dictionaryDefinitions": [],
+    "dictionaries": [
+        "latex"
+    ],
+    "words": [
+        "adev",
+        "cbar",
+        "cmap",
+        "fontsize",
+        "labelpad",
+        "labelsize",
+        "mathrm",
+        "newaxis",
+        "nomath",
+        "rdev",
+        "simsio",
+        "viridis"
+    ],
+    "ignoreWords": [],
+    "import": []
+}

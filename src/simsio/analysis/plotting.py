@@ -26,7 +26,7 @@ __all__ = [
     "sanitize_fig_name",
     "sm_from_obs",
     "autoscale_norms",
-    "annote_image_axis",
+    "annotate_image_axis",
     "apply_obs_props",
 ]
 
@@ -226,8 +226,8 @@ def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
             cbar_kwds = _parse_obs_props(obs, "cbar_kwds")
             cbar_kwds.setdefault("label", obs)
             cax.cbar = ax.cax.colorbar(im, **cbar_kwds)
-    annote_image_axis(ax.xaxis, x_obs, u)
-    annote_image_axis(ax.yaxis, y_obs, u)
+    annotate_image_axis(ax.xaxis, x_obs, u)
+    annotate_image_axis(ax.yaxis, y_obs, u)
     return im
 
 
@@ -445,15 +445,9 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
             ug_titles = obs_titles
     pad = mpl.rcParams["axes.titlepad"]
     for ax, t in zip(axs, ug_titles):
-        # ax.text(0.5, 0.5, t, transform=ax.transAxes, ha="center", va="center")
-        axis = getattr(ax, f"{xy}axis")
-        axis.labelpad = pad
-        axis.set_label_text(t)
-        axis.set_label_position(pos)
-        axis.label.set_visible(True)
 
 
-def annote_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
+def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
     if not obs:
         return
     axis.set_label_text(obs)

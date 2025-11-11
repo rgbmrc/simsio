@@ -5,7 +5,7 @@ from typing import Hashable
 import numpy as np
 import xarray as xr
 
-from simsio.analysis.quantitites import Measure
+from simsio.analysis.quantities import Measure
 from simsio.configs import SimsQuery
 from simsio.simulations import get_sim, get_sims_iter, sims_iter_like_arg, Simulation
 
@@ -38,8 +38,8 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # could call unique on vals directly (as for lexsort in uids_sort)
     # but we need coords anyway and then unique is faster on inds
     inds, js, counts = np.unique(inds, axis=1, return_index=True, return_counts=True)
-    if dupl := np.sum(counts - 1):
-        warn(f"discarded {dupl} simulations with duplicate coords")
+    if duplicate := np.sum(counts - 1):
+        warn(f"discarded {duplicate} simulations with duplicate coords")
     shape = tuple(map(len, coords.values()))
     grid = np.empty(shape, dtype=object)
     for i, j in zip(inds.T, js):
