@@ -29,10 +29,15 @@ def nomath(text):
     return text.replace("$", "")
 
 
-_FUNC_ARG = "$\:\cdot\:$"
-_OP_REGEX = re.compile("Same as (\W*(a|b)\W*?(a|b)?\W*)\.")
+USE_TEX = True # read matplotlib rc settings? simsio settings?
 _DEFAULT_SENTINEL = ...  # object() or dpath._DEFAULT_SENTINEL unstable, why?
 _NO_ARG_SENTINEL = object()
+_FUNC_ARG = r"$\:\cdot\:$"
+_OP_REGEX = re.compile(r"Same as (\W*(a|b)\W*?(a|b)?\W*)\.")
+_CUSTOM_OP_LABEL_TEX = {  # only for label, not name
+    operator.pow: r"{a}$^${b}",
+    operator.mul: r"{a}{l}\cdot{r}{b}",
+}
 
 
 def closest_common_ancestor(*cls_list):
@@ -129,6 +134,8 @@ class Function:
         self.func = func
         if isinstance(self.label, Function):
             self.label = self.label.func  # avoid "partial"
+        elif not callable(self.label) and USE_TEX and not self.label.startswith("$"):
+            self.label = rf"$\text{{{self.label}}}$"            
         assert self.name not in self.INVALID_NAMES
         if self.name in self._register:
             registered_self = self._register[self.name]
@@ -164,6 +171,8 @@ class Function:
         self.name = value
 
     def _repr_latex_(self) -> str:
+        # https://ipython.readthedocs.io/en/stable/config/integrating.html
+        # TODO USE_TEX
         return self.string()
 
     def __repr__(self) -> str:
@@ -209,7 +218,7 @@ class Function:
             else:
                 label = other.label(x=self.label)
         else:
-            label = self.compose_labels(self, "{b}$\:${a}", other)
+            label = self.compose_labels(self, r"{b}$\:${a}", other)
         return type(self)(
             lambda x: other.func(self.func(x)),
             attrs,
@@ -275,7 +284,8 @@ class Function:
             attrs = cls.compose_attrs(other, self)  # self takes precedence
             func = lambda x: op(self.func(x), other.func(x))
         name = cls.compose_names(self, op, other)
-        label = cls.compose_labels(self, op_fmt or op, other)
+        op_fmt = op_fmt or _CUSTOM_OP_LABEL_TEX.get(op) or op
+        label = cls.compose_labels(self, op_fmt, other)
         return cls(func, attrs, name=name, label=label)
 
     def __neg__(self):
@@ -412,6 +422,7 @@ class Function:
         return np.frompyfunc(cls.get, 1, 1)(func_like)
 
     def string(self, x=None, val=_DEFAULT_SENTINEL, fmt="", sep=None, math=None):
+        # TODO USE_TEX
         l = self.label
         if callable(l):
             l = l(x=_FUNC_ARG)
@@ -433,7 +444,7 @@ class Function:
                         fmt = "s"
             m = "$" if math else ""
             l = f"{l}{sep}{m}{val:{fmt}}{m}"
-        return l.replace("$$", "")  # OPT could alse remove $${} & {}$$
+        return l.replace("$$", "")  # OPT could also remove $${} & {}$$?
 
     @classmethod
     def strings(cls, funcs, vals, junc=";"):
@@ -444,6 +455,8 @@ class Measure(Function):
     def __init__(self, func, _from=None, **attrs):
         self.cached = True
         self.filter = None
+        # TODO document .base is not perfect and only works with @:
+        # measure**2 has itself as base, not measure (with filter=lambda x: x**2)
         # override _from.base (should we leave it?)
         attrs.setdefault("base", self)
         super().__init__(func, _from, **attrs)
@@ -484,7 +497,7 @@ class Measure(Function):
             if sims_like is np.ma.masked or self.default is _DEFAULT_SENTINEL:
                 return np.ma.masked
             return self.default
-        if self.cached and not kwds:  # FIXME
+        if self.cached and not kwds:  # FIXME what? LGTM
             if self not in sims_like.cache:
                 sims_like.cache[self] = super().__call__(sims_like)
             return sims_like.cache[self]
