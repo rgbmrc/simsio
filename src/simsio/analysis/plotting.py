@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
 import mpl_toolkits.axes_grid1 as axg
-from matplotlib import colors, ticker, cm
+from matplotlib import rcParams, colors, ticker, cm, transforms
 
 from simsio.analysis.quantities import Function, Measure
 from simsio.analysis.grids import Grid1D, bin_edges
@@ -410,14 +410,12 @@ def sanitize_fig_name(fig):
 
 
 def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
+    vertical = pos in {"left", "right"}
     ug = np.atleast_2d(ug)
     obs = np.atleast_2d(obs)
-    if pos in {"top", "bottom"}:
+    if not vertical:
         ug = ug.swapaxes(0, 1)
         obs = obs.swapaxes(0, 1)
-        xy = "x"
-    else:
-        xy = "y"
     obs_titles = []
     try:
         obs = np.squeeze(obs, tuple(range(2, np.ndim(obs))))
@@ -443,8 +441,76 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
             ug_titles = map("\n".join, np.broadcast(obs_titles, ug_titles))
         else:
             ug_titles = obs_titles
-    pad = mpl.rcParams["axes.titlepad"]
     for ax, t in zip(axs, ug_titles):
+        setattr(ax, ("y" if vertical else "x") + "_title", add_axis_label(ax, t, pos))
+
+
+def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
+    """
+    Add a second axis-label-like text using ax.text with an absolute pad in points.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to label.
+    label : str
+        Text of the label.
+    fontdict : dict, optional
+        A dictionary to override the default text properties.
+    labelpad : float, optional
+        Padding in points away from the axes. If None, uses rcParams['axes.labelpad'].
+    loc : {'left', 'right', 'top', 'bottom'}, default: 'right'
+        Which side of the axes to place the label.
+        'top'/'bottom' behave like an x-label; 'left'/'right' like a y-label.
+    **kwargs
+        Additional keyword arguments forwarded to `ax.text`.
+
+    Returns
+    -------
+    text : matplotlib.text.Text
+        The created text object.
+    """
+    fig = ax.figure
+
+    if labelpad is None:
+        labelpad = rcParams["axes.labelpad"]  # in points
+
+    labelpad = labelpad / 72.0 # ScaledTranslation expects inches
+    # TODO is there a bounding box including ticks and tick labels?
+
+    if loc == "bottom":
+        x, y = 0.5, 0.0
+        dx, dy = 0.0, -labelpad
+        defaults = dict(ha="center", va="top")
+    elif loc == "top":
+        x, y = 0.5, 1.0
+        dx, dy = 0.0, labelpad
+        defaults = dict(ha="center", va="bottom")
+    elif loc == "left":
+        x, y = 0.0, 0.5
+        dx, dy = -labelpad, 0.0
+        defaults = dict(ha="right", va="center", rotation=90)
+    elif loc == "right":
+        x, y = 1.0, 0.5
+        dx, dy = labelpad, 0.0
+        defaults = dict(ha="left", va="center", rotation=90)
+    else:
+        raise ValueError("loc must be one of 'left', 'right', 'top', 'bottom'")
+
+    # Collect text properties: defaults < fontdict < kwargs
+    text_kwargs = {}
+    text_kwargs.update(defaults)
+    if fontdict is not None:
+        text_kwargs.update(fontdict)
+    text_kwargs.update(kwargs)
+
+    if "fontsize" not in text_kwargs and "size" not in text_kwargs:
+        text_kwargs["fontsize"] = rcParams["axes.labelsize"] # TODO titlesize
+
+    trans = ax.transAxes + transforms.ScaledTranslation(dx, dy, fig.dpi_scale_trans)
+    text = ax.text(x, y, label, transform=trans, **text_kwargs)
+    return text
+
 
 
 def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
