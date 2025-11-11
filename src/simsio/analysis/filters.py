@@ -3,7 +3,7 @@ from matplotlib import colors, ticker
 import cmcrameri.cm as ccm  # DEL
 import mplotter as plotter  # DEL
 
-from simsio.analysis.quantitites import Function, Measure, id_, nomath
+from simsio.analysis.quantities import Function, Measure, id_, nomath
 from simsio.analysis.numpy_extras import fftsymshift
 
 __all__ = [
