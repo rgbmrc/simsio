@@ -5,7 +5,7 @@ from typing import Hashable
 import numpy as np
 import xarray as xr
 
-from simsio.analysis.quantities import Measure
+from simsio.analysis.quantities import Function, Measure
 from simsio.configs import SimsQuery
 from simsio.simulations import get_sim, get_sims_iter, sims_iter_like_arg, Simulation
 
@@ -72,6 +72,10 @@ def uids_sort(
     return sims
 
 
+# TODO subclass instead?
+# https://docs.xarray.dev/en/stable/internals/extending-xarray.html
+# https://github.com/pydata/xarray/issues/3980
+# but UID grids only require limited functionality
 @xr.register_dataarray_accessor("simsio")
 class UIDSGrid:
     def __init__(self, xarray_obj: xr.DataArray):
@@ -82,6 +86,10 @@ class UIDSGrid:
         val = np.unique(obs(self._obj))
         assert val.size == 1
         return self._obj.expand_dims({obs.name: val}, axis)
+
+    def transpose(self, *dim: Hashable, **transpose_kwds):
+        names = [Function.get(d).name for d in dim]
+        return self._obj.transpose(*names, **transpose_kwds)
 
 
 def stack_grids(grids, axis=0, dim=None, **concat_kwds):
