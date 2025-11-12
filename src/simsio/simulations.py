@@ -102,8 +102,7 @@ def get_sim(sim_like):
     """Retreives a simulation from the register, building it if not already
     present.
 
-    The eventual Simulation initialization uses default arguments (except for group, if
-    provided).
+    The eventual Simulation initialization uses default arguments.
 
     Raises
     ------

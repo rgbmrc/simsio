@@ -413,7 +413,7 @@ class Function:
             try:
                 return cls._register[func_like]
             except KeyError:
-                return cls.from_path(func_like)
+                return cls.from_path(func_like)  # TODO raise? optional behavior?
         return cls.from_callable(func_like)
 
     @classmethod
