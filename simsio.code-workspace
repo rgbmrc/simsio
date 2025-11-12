@@ -4,7 +4,12 @@
 			"path": "."
 		}
 	],
+	"extensions": {
+		"recommendations": [
+			"charliermarsh.ruff"
+		]
+	},
 	"settings": {
-		"python.formatting.provider": "black"
+		"python.formatting.provider": "charliermarsh.ruff"
 	}
 }

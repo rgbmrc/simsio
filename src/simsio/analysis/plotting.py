@@ -446,8 +446,8 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
 
 
 def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
-    """
-    Add a second axis-label-like text using ax.text with an absolute pad in points.
+    """Add a second axis-label-like text using ax.text with an absolute pad
+    in points.
 
     Parameters
     ----------
@@ -469,13 +469,14 @@ def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
     -------
     text : matplotlib.text.Text
         The created text object.
+
     """
     fig = ax.figure
 
     if labelpad is None:
         labelpad = rcParams["axes.labelpad"]  # in points
 
-    labelpad = labelpad / 72.0 # ScaledTranslation expects inches
+    labelpad = labelpad / 72.0  # ScaledTranslation expects inches
     # TODO is there a bounding box including ticks and tick labels?
 
     if loc == "bottom":
@@ -505,12 +506,11 @@ def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
     text_kwargs.update(kwargs)
 
     if "fontsize" not in text_kwargs and "size" not in text_kwargs:
-        text_kwargs["fontsize"] = rcParams["axes.labelsize"] # TODO titlesize
+        text_kwargs["fontsize"] = rcParams["axes.labelsize"]  # TODO titlesize
 
     trans = ax.transAxes + transforms.ScaledTranslation(dx, dy, fig.dpi_scale_trans)
     text = ax.text(x, y, label, transform=trans, **text_kwargs)
     return text
-
 
 
 def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):

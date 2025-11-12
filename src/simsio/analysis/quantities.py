@@ -29,7 +29,7 @@ def nomath(text):
     return text.replace("$", "")
 
 
-USE_TEX = True # read matplotlib rc settings? simsio settings?
+USE_TEX = True  # read matplotlib rc settings? simsio settings?
 _DEFAULT_SENTINEL = ...  # object() or dpath._DEFAULT_SENTINEL unstable, why?
 _NO_ARG_SENTINEL = object()
 _FUNC_ARG = r"$\:\cdot\:$"
@@ -135,7 +135,7 @@ class Function:
         if isinstance(self.label, Function):
             self.label = self.label.func  # avoid "partial"
         elif not callable(self.label) and USE_TEX and not self.label.startswith("$"):
-            self.label = rf"$\text{{{self.label}}}$"            
+            self.label = rf"$\text{{{self.label}}}$"
         assert self.name not in self.INVALID_NAMES
         if self.name in self._register:
             registered_self = self._register[self.name]
