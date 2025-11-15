@@ -112,7 +112,9 @@ def stack_grids(grids, axis=0, dim=None, **concat_kwds):
 def _nested_grid_depth(grid):
     if isinstance(grid, xr.DataArray):
         return 0
-    return 1 + max(_nested_grid_depth(x) for x in grid)
+    if isinstance(grid, (tuple, list)):  # otherwise infinite recursion from str uids
+        return 1 + max(_nested_grid_depth(x) for x in grid)
+    raise TypeError
 
 
 def nest_grids(
