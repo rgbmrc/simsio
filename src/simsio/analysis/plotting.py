@@ -1,6 +1,5 @@
 import logging
 from copy import copy, deepcopy
-from functools import partial
 from itertools import filterfalse
 
 import matplotlib.pyplot as plt
@@ -11,8 +10,7 @@ from matplotlib import rcParams, colors, ticker, cm, transforms
 
 from simsio.analysis.quantities import Function, Measure
 from simsio.analysis.grids import LinearGrid, UniformGrid, bin_edges
-from simsio.analysis.organize import nest_grids
-from simsio.analysis.numpy_extras import append_til_ndim
+from simsio.analysis.organize import nest_grids, transpose_grid
 from simsio.analysis.utils import sanitize_path
 
 __all__ = [
@@ -40,8 +38,6 @@ MAX_DIGITIZED = 12
 
 REPORT_1D_DIMS = ["row", "col", "cycler", "cmap"]
 REPORT_2D_DIMS = ["row", "col"]
-nest_1d_grids = partial(nest_grids, prepend=REPORT_1D_DIMS, concat_dim="dat")
-nest_2d_grids = partial(nest_grids, prepend=REPORT_2D_DIMS, concat_dim="dat")
 
 
 def fix_mfc(l):  # TODO move to mplotter
@@ -132,61 +128,59 @@ def report_1d(
     x_obs,
     y_obs,
     cbar_obs=None,
-    x_titles=None,
-    y_titles=None,
+    y_titles=...,
+    x_titles=...,
     *,
     plotting_func=None,
     axes_func=None,
     tile_size=None,
     plot_kwds=None,
+    fig=None,
     **grid_kwds,
 ):
-    AX_LOOP_DIM = 2
+    _prepare_grid_kwds(grid_kwds)
+    # axg.Grid does not supprt cbar-related args
+    # we nonetheless keep them in grid_kwds in analogy with report_2d
+    # TODO same for other args?
+    cbar_size = grid_kwds.pop("cbar_size", CBAR_SIZE)
+    cbar_pad = grid_kwds.pop("cbar_pad", AXES_PAD)
+
+    # DEL cycler=None hack while cycler not implemented
+    dims = dict(zip(REPORT_1D_DIMS, [y_titles, x_titles, None, cbar_obs]))
+    xg, ug, (row_titles, col_titles, _, cbar_obs) = _prepare_uids_grid(ug, dims)
+    br_arrays = _prepare_arrays(len(dims), [ug, x_obs, y_obs])  # TODO x/y order, cbar
+    label_obs = [y_obs, x_obs, cbar_obs]
+    fig, grid = _prepare_fig_grid(
+        xg, br_arrays[0].shape, axg.Grid, label_obs, fig, tile_size, grid_kwds
+    )
 
     axes_func = axes_func or axes_1d
-    tile_size = tile_size or 2 * TILE_SIZE
-    grid_kwds.setdefault("axes_pad", AXES_PAD)
-    ndim = max(4, np.ndim(ug))
-    iter_arrays = (ug, x_obs, y_obs)
-    iter_arrays = (ug, x_obs, y_obs) = [append_til_ndim(a, ndim) for a in iter_arrays]
     plot_kwds = deepcopy(plot_kwds) or {}
-    label = grid_kwds.pop("label", None) or join_obs_names(y_obs, x_obs, cbar_obs)
-    shape = np.broadcast_shapes(*(a.shape[:2] for a in iter_arrays))
-    ug, *_ = np.broadcast_arrays(*iter_arrays)
-    size = np.flip(shape) * tile_size + (AXES_PAD + CBAR_SIZE, 0)
-    fig = plt.figure(label, size)
-    grid = axg.Grid(fig, 111, shape, **grid_kwds)
-
-    if cbar_obs:
+    if cbar_obs:  # TODO support multiple colorbars
         div = grid.get_divider()
-        div.append_size("right", axg.Size.Fixed(AXES_PAD))
-        div.append_size("right", axg.Size.Fixed(CBAR_SIZE))
+        div.append_size("right", axg.Size.Fixed(cbar_pad))
+        div.append_size("right", axg.Size.Fixed(cbar_size))
         cax_locator = div.new_locator(nx=-2, nx1=-1, ny=0, ny1=-1)
         grid.cax = fig.add_subplot(axes_locator=cax_locator)
         cbar_obs = copy(cbar_obs)
         cbar_obs.sm = sm_from_obs(cbar_obs, ug)
 
     grid_iter, plot_iter = np.nested_iters(
-        iter_arrays,
-        [[0, 1], [2, 3]],
-        ["refs_ok", "multi_index"],
-        order="C",
+        br_arrays, [[0, 1], [2, 3]], ["refs_ok", "multi_index"], order="C"
     )
     for ax, _ in zip(grid, grid_iter):
         us = ug[grid_iter.multi_index]
         axes_func(us, plot_iter, cbar_obs, plotting_func, plot_kwds, ax)
-        if y_obs.shape[AX_LOOP_DIM] > 1:
-            ax.legend()
+        if br_arrays[0].shape[2] > 1:
+            ax.legend()  # TODO cycler
     if cbar_obs:
         cbar_kwds = getattr(cbar_obs, "cbar_kwds", {})
         fig.colorbar(cbar_obs.sm, cax=grid.cax, label=cbar_obs, **cbar_kwds)
     for ax in grid:
         if not ax.lines:
             ax.axis("off")
-
-    grid_titles(grid.axes_row[0], "top", ug, x_titles)
-    grid_titles(grid.axes_column[0], "left", ug, y_titles)
-
+    grid_titles(grid.axes_row[0], "top", ug, col_titles)
+    grid_titles(grid.axes_column[0], "left", ug, row_titles)
     return fig, grid
 
 
@@ -246,6 +240,42 @@ def grid_from_obs(obs, u):
         return (-0.5, len(vals) - 0.5)
 
 
+def _prepare_uids_grid(ug, dims):
+    try:
+        xg = nest_grids(ug, dims.keys(), "dat")
+    except TypeError:
+        xg = None
+    else:
+        # OPT modify dims in place instead?
+        xg, dims = transpose_grid(xg, dims)
+        ug = xg.to_masked_array(copy=False)
+    return xg, ug, dims
+
+
+def _prepare_arrays(ndims, it_arrays):
+    dummy = np.empty([1] * ndims)  # ensure at least ndims
+    # transpose to broadcast from the leading dimension
+    _, *br_arrays = np.broadcast_arrays(dummy, *map(np.transpose, it_arrays))
+    return [*map(np.transpose, br_arrays)]
+
+
+def _prepare_grid_kwds(grid_kwds, cbar=True):
+    grid_kwds.setdefault("axes_pad", AXES_PAD)
+    if cbar:
+        grid_kwds.setdefault("cbar_pad", AXES_PAD)
+        grid_kwds.setdefault("cbar_size", CBAR_SIZE)
+
+
+def _prepare_fig_grid(xg, shape, grid_class, label_obs, fig, tile_size, grid_kwds):
+    shape = shape[:2]
+    tile_size = tile_size or TILE_SIZE
+    label = getattr(xg, "name", "") + "/" + join_obs_names(*label_obs)
+    size = np.flip(shape) * (tile_size + grid_kwds["axes_pad"])  # just an estimate
+    fig = plt.figure(fig or label, size)
+    grid = grid_class(fig, 111, shape, **grid_kwds)
+    return fig, grid
+
+
 def report_2d(
     ug,
     obs,
@@ -256,46 +286,24 @@ def report_2d(
     y_obs=None,
     plotting_func=None,
     tile_size=None,
-    label=None,
     im_kwds=None,
     fig=None,
     **grid_kwds,
 ):
-    try:
-        xg = nest_2d_grids(ug)
-    except TypeError:
-        pass
-    else:
-        ug = xg.to_masked_array(copy=False)
-        # TODO support inverse operation: use args to transpose xg
-        grid_dim = dict(enumerate(xg.dims)).get
-        y_titles = y_titles or grid_dim(0)
-        x_titles = x_titles or grid_dim(1)
-        # TODO cannot infer from xg: we don't know what obs does with dims 2,3,...
-        # y_obs = y_obs or grid_dim(2)
-        # x_obs = x_obs or grid_dim(3)
-
     im_kwds = im_kwds or {}
+    _prepare_grid_kwds(grid_kwds)
+
     obs = Function.get_array(obs)
     # TODO support array of...
     x_obs = Function.get(x_obs)
     y_obs = Function.get(y_obs)
-    # only need this in grid_titles (which already calls get_array)
-    # x_titles = Function.get_array(x_titles)
-    # y_titles = Function.get_array(y_titles)
-    obs_ndim = obs.ndim
-    iter_arrays = (ug, obs)
-    ndim = max(2, *(np.ndim(a) for a in iter_arrays))
-    iter_arrays = (ug, obs) = [append_til_ndim(a, ndim) for a in iter_arrays]
-    iter_arrays = _ug, _obs = np.broadcast_arrays(*iter_arrays)
 
-    # obs = Measure.get(obs)
     plotting_func = plotting_func or plot_2d_data
 
     # cbar positioning defaults
     cbar_mode = "single"
     cbar_location = "right"
-    if obs_ndim == 2:
+    if obs.ndim == 2:
         cbar_mode = "each"
     elif obs.shape[0] > 1:
         cbar_mode = "edge"
@@ -305,25 +313,26 @@ def report_2d(
     cbar_mode = grid_kwds.setdefault("cbar_mode", cbar_mode)
     cbar_location = grid_kwds.setdefault("cbar_location", cbar_location)
 
-    shape = _obs.shape[:2]
-    tile_size = tile_size or TILE_SIZE
-    grid_kwds.setdefault("axes_pad", AXES_PAD)
-    grid_kwds.setdefault("cbar_size", CBAR_SIZE)
-    label = label or ",".join((o.name for o in np.ravel(obs) if o))
-    fig = fig or plt.figure(label, np.asanyarray(shape[::-1]) * tile_size)
-    grid = axg.ImageGrid(fig, 111, shape, **grid_kwds)
+    # OPT y_obs, x_obs from xg? dunno what obs does with dims >= 2
+    dims = dict(zip(REPORT_2D_DIMS, [y_titles, x_titles]))
+    xg, ug, (row_titles, col_titles) = _prepare_uids_grid(ug, dims)
+    br_arrays = _prepare_arrays(len(dims), [ug, obs])
+    fig, grid = _prepare_fig_grid(
+        xg, br_arrays[0].shape, axg.ImageGrid, [obs], fig, tile_size, grid_kwds
+    )
 
-    label_cbar = obs.size == 1 or (obs_ndim == 2 and cbar_mode == "each")
+    br_ug, _ = br_arrays  # OPT do we really need the broadcasted ug here?
+    label_cbar = obs.size == 1 or (obs.ndim == 2 and cbar_mode == "each")
     # y-titles
     axs = grid.axes_column[-1 if cbar_location == "left" else 0]
     pos = "right" if cbar_location == "left" else "left"
     label_cbar_row = cbar_mode == "edge" and cbar_location in {"left", "right"}
-    grid_titles(axs, pos, _ug, y_titles, obs, label_cbar or label_cbar_row)
+    grid_titles(axs, pos, br_ug, row_titles, obs, label_cbar or label_cbar_row)
     # x-titles
     axs = grid.axes_row[-1 if cbar_location == "top" else 0]
     pos = "bottom" if cbar_location == "top" else "top"
     label_cbar_col = cbar_mode == "edge" and cbar_location in {"top", "bottom"}
-    grid_titles(axs, pos, _ug, x_titles, obs, label_cbar or label_cbar_col)
+    grid_titles(axs, pos, br_ug, col_titles, obs, label_cbar or label_cbar_col)
 
     # normalization
     # TODO handle norm given in im_kwds
@@ -335,12 +344,13 @@ def report_2d(
         obs = autoscale_norms(obs, ug, lims_agg_axs)
 
     label_cbar = label_cbar or label_cbar_row or label_cbar_col
-    it_flags = ["refs_ok", "multi_index"]
-    it = np.nditer([grid.axes_row, obs], it_flags, op_axes=[[0, 1]] * 2)
+    it = np.nditer(
+        [grid.axes_row, obs], ["refs_ok", "multi_index"], op_axes=[[0, 1]] * 2
+    )
     for ax, o in it:
         ax = ax.item()
         o = o.item()
-        us = _ug[it.multi_index]
+        us = br_ug[it.multi_index]
         plotting_func(o, us, x_obs=x_obs, y_obs=y_obs, ax=ax, **im_kwds)
         if cbar := getattr(ax, "cbar", None) and not label_cbar:
             cbar.set_label("")

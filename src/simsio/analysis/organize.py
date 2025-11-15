@@ -148,3 +148,48 @@ def nest_grids(
     dims = list(prepend or [])[:ndim]
     dims.extend(f"{concat_dim}_{i}" for i in range(len(dims), ndim))
     return xr.combine_nested(nested, dims, **combine_kwargs).transpose(*dims, ...)
+
+
+def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable]):
+    """Best usage is either all or no None dims.
+
+    Mixed case might give unexpected results.
+
+    """
+    # TODO FunctionLike in type hints?
+    try:
+        dims_items = iter(dims.items())
+    except AttributeError:
+        dims_items = ((f"dim_{i}", dim) for i, dim in enumerate(dims))
+    old_grid = list(grid.dims)
+    new_grid = []
+    new_dims = {}
+    while old_grid:
+        k, o = next(dims_items, (None, ...))
+        if not o:  # None or False
+            try:
+                old_grid.remove(k)
+            except ValueError:
+                grid = grid.expand_dims(k)
+            new_grid.append(k)
+            new_dims[k] = o
+            continue
+        if o is ...:
+            o = old_grid.pop(0)
+            new_grid.append(o)
+            # HACK if to avoid casting to Function "row" etc
+            new_dims[k] = o if o in grid.coords else None
+            continue
+        try:
+            # DEL .name if Function coords is implemented
+            o = Function.get(o).name
+            old_grid.remove(o)
+            new_grid.append(o)
+            new_dims[k] = o
+        except (TypeError, ValueError):
+            # we need this, e.g. for report_2d with a single-sim x_obs
+            new_grid.append(old_grid.pop(0))
+            new_dims[k] = o
+    new_dims.pop(None, None)
+    # return grid.transpose(*new_grid)
+    return grid.transpose(*new_grid), [*map(Function.get, new_dims.values())]
