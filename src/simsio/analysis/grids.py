@@ -14,18 +14,18 @@ from simsio.utils import as_int
 class LinearGrid:
     """1D grid of uniformly spaced points.
 
-    At least one among `n` and `extent` must be given.
+    At least one among `num` and `extent` must be given.
 
     Parameters
     ----------
-    n
+    num
         Number of grid points or bins.
     extent
         Interval bounds [a, b] or length (b - a),
         converted to [a, b] using `origin` and `anchor`.
     step
         Grid step or spacing, namely bin width.
-        Ignored if `n` and `extent` are given.
+        Ignored if `num` and `extent` are given.
     anchor
         Anchoring of the grid, usually in the interval [0, 1].
         Used e.g. for rescaling and when `extent` is given as a scalar,
@@ -50,37 +50,37 @@ class LinearGrid:
     stop+=eps (arange) or num+=1 (linspace):
 
     >>> LinearGrid(2, step=0.5).edges  # arange(2+.01, step=0.5)
-    >>> LinearGrid(2, n=4).edges  # linspace(0, 2, 4+1)
+    >>> LinearGrid(2, num=4).edges  # linspace(0, 2, 4+1)
 
     """
 
     def __init__(
         self,
         extent: float | tuple[float, float] = None,
-        n: int = None,
+        num: int = None,
         *,
         step: float = None,
         anchor: float = 0.0,
         origin: float = None,
         periodic: bool = False,
     ):
-        if n is None and extent is None:
-            raise ValueError("At least one of 'n' or 'extent' must be given")
-        if n is not None and extent is not None and step is not None:
+        if num is None and extent is None:
+            raise ValueError("At least one of 'num' or 'extent' must be given")
+        if num is not None and extent is not None and step is not None:
             warn("'step' was passed but will be ignored")
         if np.size(extent) == 2 and origin is not None:
             warn("'origin' was passed but will be ignored")
-        step = step or 1.0  # ignored if n and extent are given
+        step = step or 1.0  # ignored if num and extent are given
         origin = origin or 0.0  # ignored if extent is given as interval
-        extent = np.squeeze(step * n if extent is None else extent)
+        extent = np.squeeze(step * num if extent is None else extent)
         if extent.size == 1:  # extent = (b - a)
             extent = origin + extent * (np.arange(2) - anchor)
-        n = as_int(n or extent.ptp() / abs(step))
-        assert n > 1 and extent.size == 2 and extent.ptp() != 0
+        num = as_int(num or extent.ptp() / abs(step))
+        assert num > 1 and extent.size == 2 and extent.ptp() != 0
 
-        self.n = n
+        self.num = num
         self.extent = np.array(extent, dtype=float)  # copy
-        self.step = self.extent.ptp() / self.n
+        self.step = self.extent.ptp() / self.num
         self.anchor = float(anchor)
         self.periodic = bool(periodic)
 
@@ -112,33 +112,33 @@ class LinearGrid:
             raise ValueError(f"Grid points must be equally spaced; got steps {steps}")
 
         ext = (x[0] - 0.5 * step, x[-1] + 0.5 * step)
-        return cls(ext, n=x.size, periodic=periodic)
+        return cls(ext, num=x.size, periodic=periodic)
 
     @property
     def points(self) -> NDArray:
         """Grid points (bin centers)
 
-        `x_i = a + (i + 0.5) * step  for i = 0, ..., n-1`
+        `x_i = a + (i + 0.5) * step  for i = 0, ..., num-1`
 
         """
-        return np.linspace(*(self.extent + self.step / 2), self.n, endpoint=False)
+        return np.linspace(*(self.extent + self.step / 2), self.num, endpoint=False)
 
     @property
     def edges(self) -> NDArray:
         """Grid edges (bin boundaries)
 
-        `e_i = a + i * step  for i = 0, ..., n`
+        `e_i = a + i * step  for i = 0, ..., num`
 
         Same as `grid.dual(extremals=True).points`.
 
         """
-        return np.linspace(*self.extent, self.n + 1)
+        return np.linspace(*self.extent, self.num + 1)
 
     def index(self, vals: float | Sequence[float], weights=False) -> int | NDArray:
         """Return the index (or indices) for evaluating fields on the grid.
 
         For the non-periodic case, this identifies the subinterval containing
-        `val`. For the periodic case, indices are wrapped modulo `n`.
+        `val`. For the periodic case, indices are wrapped modulo `num`.
 
         Parameters
         ----------
@@ -168,7 +168,7 @@ class LinearGrid:
             # TODO many rough edges, e.g. what if
             # not periodic and extent[0] < val < points[0]
             q, r = np.divmod(np.asanyarray(vals) - self.extent[0], self.step)
-            q = q.astype(int) % self.n
+            q = q.astype(int) % self.num
             r /= self.step
             q = (q + np.rint(r)).astype(int)
             return ([q - 1, q], [r, r])
@@ -183,9 +183,9 @@ class LinearGrid:
 
         i = ((x - a) // self.step).astype(int)
         if self.periodic:
-            i = i % self.n
+            i = i % self.num
         else:
-            i = np.clip(i, None, self.n - 1)  # right endpoint val == b
+            i = np.clip(i, None, self.num - 1)  # right endpoint val == b
 
         if np.isscalar(vals):
             return i.item()
@@ -207,14 +207,14 @@ class LinearGrid:
 
         Notes
         -----
-        The new number of points, computed as round(n / factor), must be
+        The new number of points, computed as round(num / factor), must be
         an integer (up to numerical precision) greater or equal to 2.
 
         """
         if factor == 1:
             return self
         return type(self)(
-            n=as_int(self.n / factor),
+            num=as_int(self.num / factor),
             extent=self.extent.copy(),
             periodic=self.periodic,
         )
@@ -226,8 +226,8 @@ class LinearGrid:
         ----------
         extremals
             If True (default), include extremal boundaries, resulting
-            in `n + 1` dual points.
-            If False, use only interior boundaries, resulting in `n - 1`
+            in `num + 1` dual points.
+            If False, use only interior boundaries, resulting in `num - 1`
             dual points.
 
         Returns
@@ -243,7 +243,7 @@ class LinearGrid:
         """
         # TODO handle periodicity, e.g. for building momentum space of a real space
         dual = type(self)(
-            n=self.n - 1 + 2 * extremals,
+            num=self.num - 1 + 2 * extremals,
             step=self.step,
             anchor=0.5,
             origin=self.extent.mean(),
@@ -252,11 +252,11 @@ class LinearGrid:
         dual.anchor = self.anchor  # reinstate anchor for further manipulation
         return dual
 
-    def broadcast_to(self, n: int) -> Self:
+    def broadcast_to(self, num: int) -> Self:
         # TODO deprecate, this is not unique! e.g.
         # 3>2>8, 3>4>8, 3>9>8 are all valid
         # with larger numbers problems less likely (?)
-        """Broadcasts the current grid to a new one with given 'n'.
+        """Broadcasts the current grid to a new one with given 'num'.
 
         Broadcasting is achieved via a dual followed by block.
 
@@ -268,11 +268,13 @@ class LinearGrid:
             # returns n_old / n_new if n_old is a multiple or divisor of n_new, otherwise None
             return None if (n_old % n_new and n_new % n_old) else n_old / n_new
 
-        fs = {(f, d) for d in (0, +1, -1) if (f := _rgfactor(n, self.n + d))}
+        fs = {(f, d) for d in (0, +1, -1) if (f := _rgfactor(num, self.num + d))}
         try:
             ((f, d),) = fs
         except ValueError as e:
-            raise ValueError(f"Grid1D unbroadcastable from n={self.n} to n={n}") from e
+            raise ValueError(
+                f"Grid1D unbroadcastable from num={self.num} to num={num}"
+            ) from e
 
         broadcasted = self
         if d != 0:
@@ -313,7 +315,7 @@ class UniformGrid:
 
     """
 
-    def __init__(self, lingrid, scale):
+    def __init__(self, lingrid: LinearGrid, scale: ScaleLike):
         self.lingrid = lingrid
         self._init_scale_trans(scale)
         if not np.all(np.isfinite(self.extent)):
@@ -343,7 +345,7 @@ class UniformGrid:
         --------
 
         This factory method can reproduce e.g. both numpy's logspace and geomspace,
-        while also allowing to use step instead of n (num).
+        while also allowing to use step instead of num.
 
         >>> UniformGrid.from_params([1e-2, 1e2], "log", step=0.5).edges  # geomspace
         >>> UniformGrid.from_params([-2, 2], "log", scaled=True, step=0.5).edges  # logspace
@@ -369,8 +371,8 @@ class UniformGrid:
         return cls(LinearGrid.from_points(s, periodic), scale)
 
     @property
-    def n(self):
-        return self.lingrid.n
+    def num(self):
+        return self.lingrid.num
 
     @property
     def extent(self):
