@@ -24,7 +24,7 @@ class LinearGrid:
         Interval bounds [a, b] or length (b - a),
         converted to [a, b] using `origin` and `anchor`.
     step
-        Grid step, namely bin width.
+        Grid step or spacing, namely bin width.
         Ignored if `n` and `extent` are given.
     anchor
         Anchoring of the grid, usually in the interval [0, 1].
@@ -43,6 +43,15 @@ class LinearGrid:
         If True, treat the grid as periodic (a ring); otherwise as an open
         segment. Periodicity affects e.g. how indices wrap in :meth:`index`.
 
+    Exemples
+    --------
+
+    Easily reproduce numpy's arange and linspace, avoiding the common
+    stop+=eps (arange) or num+=1 (linspace):
+
+    >>> LinearGrid(2, step=0.5).edges  # arange(2+.01, step=0.5)
+    >>> LinearGrid(2, n=4).edges  # linspace(0, 2, 4+1)
+
     """
 
     def __init__(
@@ -51,8 +60,8 @@ class LinearGrid:
         n: int = None,
         *,
         step: float = None,
-        origin: float = None,
         anchor: float = 0.0,
+        origin: float = None,
         periodic: bool = False,
     ):
         if n is None and extent is None:
@@ -229,18 +238,19 @@ class LinearGrid:
 
         Notes
         -----
-        The dual grid is created as non-periodic, regardless of the original
-        `periodic` setting. Handling a truly periodic dual grid is left as
-        a possible extension.
+        Currently periodic is passed through, in the future this may change.
 
         """
         # TODO handle periodicity, e.g. for building momentum space of a real space
-        return type(self)(
+        dual = type(self)(
             n=self.n - 1 + 2 * extremals,
             step=self.step,
-            origin=self.extent.mean(),
             anchor=0.5,
+            origin=self.extent.mean(),
+            periodic=self.periodic,
         )
+        dual.anchor = self.anchor  # reinstate anchor for further manipulation
+        return dual
 
     def broadcast_to(self, n: int) -> Self:
         # TODO deprecate, this is not unique! e.g.
@@ -285,30 +295,21 @@ class UniformGrid:
 
     Uniform partition of an interval [a, b] in some *scaled* coordinate
     s = T(x), where T is the transform associated to a matplotlib scale.
-    In **linear** scale, this reduces to a standard evenly spaced x.
-
-    At least one among `n` and `extent` must be given.
+    For scale="linear", it is equivalent to :class:`LinearGrid`.
 
     Parameters
     ----------
-    n
-        Number of grid points or bins.
-    extent
-        Interval bounds [a, b].
-    anchor
-        See :class:`LinearGrid`.
-    periodic
-        See :class:`LinearGrid`.
+    lingrid
+        A linear grid.
     scale
         Matplotlib scale name ("linear", "log", "symlog", ...),
         or a `ScaleBase` instance. Default is "linear".
 
-
     Notes
     -----
     Internally stores the :class:`LinearGrid` for s = T(x),
-    T being the 1D transform associated with 'scale'.
-    Implements a translation layer between s and x.
+    T being the 1D transform associated with 'scale', and
+    implements a translation layer between s and x.
 
     """
 
@@ -322,21 +323,36 @@ class UniformGrid:
             )
 
     @classmethod
-    def from_extent(
-        cls, extent: tuple[float, float], scale: ScaleLike, **lingrid_kwds
+    def from_params(
+        cls,
+        extent: tuple[float, float],
+        scale: ScaleLike,
+        scale_extent: bool = True,
+        **lingrid_kwds,
     ) -> Self:
-        """Uniform grid for the interval extent = [a, b] (in data
-        coordinates).
+        """Factory method mimicking :class:`LinearGrid`'s signature.
 
-        Converts 'extent' to scaled coordinates and passes it to :class:`LinearGrid`,
-        together with any keyword arguments (passed as-is).
-        Scalar extent is not supported (it only makes sense in linear scale) thus,
-        even if given, origin is always ignored.
+        If 'scale_extent' is True, 'extent' is taken to be in scaled coordinates and
+        passed to :class:`LinearGrid` as-is, together with any keyword arguments.
+        If 'scale_extent' is False (default), 'extent' is taken to be in data
+        coordinates and converted to scaled coordinates internally. In this case,
+        'extent' must be an interval [a, b] and 'origin' is ignored
+        (a scalar extent only makes sense in linear scale).
+
+        Exemples
+        --------
+
+        This factory method can reproduce e.g. both numpy's logspace and geomspace,
+        while also allowing to use step instead of n (num).
+
+        >>> UniformGrid.from_params([1e-2, 1e2], "log", step=0.5).edges  # geomspace
+        >>> UniformGrid.from_params([-2, 2], "log", scaled=True, step=0.5).edges  # logspace
 
         """
-        assert np.size(extent) == 2, "Extent must be a 2-tuple"
         scale = get_scale(scale)
-        extent = scale.get_transform().transform(extent)
+        if not scale_extent:
+            assert np.size(extent) == 2, "Scalar extent not supported in data coords"
+            extent = scale.get_transform().transform(extent)
         lingrid = LinearGrid(extent, **lingrid_kwds)
         return cls(lingrid, scale)
 
