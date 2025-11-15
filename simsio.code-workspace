@@ -10,6 +10,8 @@
 		]
 	},
 	"settings": {
-		"python.formatting.provider": "charliermarsh.ruff"
+		"[python]": {
+			"editor.defaultFormatter": "charliermarsh.ruff"
+		}
 	}
 }
