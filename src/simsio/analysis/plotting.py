@@ -10,7 +10,7 @@ import mpl_toolkits.axes_grid1 as axg
 from matplotlib import rcParams, colors, ticker, cm, transforms
 
 from simsio.analysis.quantities import Function, Measure
-from simsio.analysis.grids import LinearGrid, bin_edges
+from simsio.analysis.grids import LinearGrid, UniformGrid, bin_edges
 from simsio.analysis.organize import nest_grids
 from simsio.analysis.numpy_extras import append_til_ndim
 from simsio.analysis.utils import sanitize_path
@@ -201,6 +201,9 @@ def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
     im_kwds = getattr(obs, "im_kwds", {}) | im_kwds
     # prevent autoscale of the original observable's norm
     # copies still needed also in grid e.g. when cbar_mode="each"
+    # FIXME I am afraid imshow does not cover 2d plots with non-linear coords
+    # https://stackoverflow.com/a/20844584
+    # im_kwds.setdefault("extent", (*ext_from_obs(x_obs, u), *ext_from_obs(y_obs, u.T)))
     im_kwds.setdefault("cmap", copy(getattr(obs, "cmap", None)))
     im_kwds.setdefault("norm", copy(getattr(obs, "norm", None)))
     try:
@@ -230,6 +233,17 @@ def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
     annotate_image_axis(ax.xaxis, x_obs, u)
     annotate_image_axis(ax.yaxis, y_obs, u)
     return im
+
+
+def grid_from_obs(obs, u):
+    raise NotImplementedError  # TODO just a sketch
+    vals = obs(u)
+    uniq = uniq_flat_mask(obs(u))
+    scale = getattr(obs, "scale", None)
+    try:
+        return UniformGrid.from_points(uniq, scale).extent
+    except ValueError:
+        return (-0.5, len(vals) - 0.5)
 
 
 def report_2d(
