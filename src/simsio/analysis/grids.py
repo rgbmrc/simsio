@@ -338,7 +338,7 @@ class UniformGrid:
         scale = get_scale(scale)
         extent = scale.get_transform().transform(extent)
         lingrid = LinearGrid(extent, **lingrid_kwds)
-        return cls(scale, lingrid)
+        return cls(lingrid, scale)
 
     @classmethod
     def from_points(
