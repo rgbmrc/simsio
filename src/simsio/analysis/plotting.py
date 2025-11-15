@@ -10,7 +10,7 @@ import mpl_toolkits.axes_grid1 as axg
 from matplotlib import rcParams, colors, ticker, cm, transforms
 
 from simsio.analysis.quantities import Function, Measure
-from simsio.analysis.grids import Grid1D, bin_edges
+from simsio.analysis.grids import LinearGrid, bin_edges
 from simsio.analysis.organize import nest_grids
 from simsio.analysis.numpy_extras import append_til_ndim
 from simsio.analysis.utils import sanitize_path
@@ -184,8 +184,6 @@ def report_1d(
         if not ax.lines:
             ax.axis("off")
 
-    # FIXME this removes eventual x_obs & y_obs labels
-    #       even when e.g. title should be "top" and label "bottom"
     grid_titles(grid.axes_row[0], "top", ug, x_titles)
     grid_titles(grid.axes_column[0], "left", ug, y_titles)
 
@@ -194,6 +192,9 @@ def report_1d(
 
 def plot_2d_data(obs, u=None, x_obs=None, y_obs=None, ax=None, **im_kwds):
     ax = ax or plt.gca()
+    obs = Function.get(obs)
+    x_obs = Function.get(x_obs)
+    y_obs = Function.get(y_obs)
     if not obs:
         ax.axis("off")
         return None
@@ -334,21 +335,25 @@ def report_2d(
     return fig, grid
 
 
+def uniq_flat_mask(dat):
+    dat = np.ma.ravel(dat)  # w/o ma drops mask
+    return np.unique(dat[~dat.mask])
+
+
 def sm_from_obs(obs, us=None):
-    # generalize to log and unevenly spaced values
-    # copy because ScalarMappable(norm=my_norm).norm is my_norm
-    norm = getattr(obs, "norm", None)
+    norm = getattr(obs, "norm", None)  # TODO from scale? see mpl.Colorizer.norm
     cmap = getattr(obs, "cmap", None)
     if us is not None:
+        # copy because ScalarMappable(norm=my_norm).norm is my_norm
         norm = copy(norm) if norm else colors.Normalize()
         cmap = copy(plt.get_cmap(cmap))
-        dat = np.ma.ravel(obs(us))  # w/o ma drops mask
-        uniq = np.unique(dat[~dat.mask])
+        uniq = uniq_flat_mask(obs(us))
         if getattr(obs, "digitize", uniq.size < MAX_DIGITIZED):
             cmap = cmap.resampled(uniq.size)
             cbar_kwds = obs.setdefault("cbar_kwds", {})
             try:
-                grid = Grid1D.from_points(uniq)
+                # TODO generalize to log and unevenly spaced values
+                grid = LinearGrid.from_points(uniq)
             except ValueError:
                 # alternatively: NoNorm, but then sm.to_rgba(z) gives wrong color
                 norm = colors.BoundaryNorm(bin_edges(uniq), uniq.size)
@@ -360,7 +365,7 @@ def sm_from_obs(obs, us=None):
                     "ticks", ticker.MultipleLocator(grid.step, uniq[0])
                 )
         else:
-            norm.autoscale_None(dat)
+            norm.autoscale_None(uniq)
     return cm.ScalarMappable(norm, cmap)
 
 
