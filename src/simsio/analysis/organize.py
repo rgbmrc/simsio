@@ -88,7 +88,7 @@ class UIDSGrid:
         return self._obj.expand_dims({obs.name: val}, axis)
 
     def transpose(self, *dim: Hashable, **transpose_kwds):
-        names = [Function.get(d).name for d in dim]
+        names = [Function.get(d).name if d is not ... else d for d in dim]
         return self._obj.transpose(*names, **transpose_kwds)
 
 
