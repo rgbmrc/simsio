@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from warnings import warn
 from typing import Hashable
 
@@ -119,8 +120,7 @@ def _nested_grid_depth(grid):
 
 def nest_grids(
     nested: list,
-    *,
-    prepend: list[str | Hashable] = None,
+    prepend: Sequence[str | Hashable] = None,
     concat_dim: str | Hashable = None,
     **combine_kwargs,
 ) -> xr.DataArray:
@@ -145,6 +145,6 @@ def nest_grids(
     """
     concat_dim = concat_dim or "grid_dim"
     ndim = _nested_grid_depth(nested)
-    dims = (prepend or [])[:ndim]
+    dims = list(prepend or [])[:ndim]
     dims.extend(f"{concat_dim}_{i}" for i in range(len(dims), ndim))
     return xr.combine_nested(nested, dims, **combine_kwargs).transpose(*dims, ...)
