@@ -329,7 +329,7 @@ class UniformGrid:
         cls,
         extent: tuple[float, float],
         scale: ScaleLike,
-        scale_extent: bool = True,
+        scale_extent: bool = False,
         **lingrid_kwds,
     ) -> Self:
         """Factory method mimicking :class:`LinearGrid`'s signature.
