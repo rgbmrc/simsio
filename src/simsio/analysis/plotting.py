@@ -149,10 +149,13 @@ def report_1d(
     dims = dict(zip(REPORT_1D_DIMS, [y_titles, x_titles, None, cbar_obs]))
     xg, ug, (row_titles, col_titles, _, cbar_obs) = _prepare_uids_grid(ug, dims)
     br_arrays = _prepare_arrays(len(dims), [ug, x_obs, y_obs])  # TODO x/y order, cbar
-    label_obs = [y_obs, x_obs, cbar_obs]
-    fig, grid = _prepare_fig_grid(
-        xg, br_arrays[0].shape, axg.Grid, label_obs, fig, tile_size, grid_kwds
-    )
+
+    # figure & axes
+    shape = br_arrays[0].shape[:2]
+    size = _fig_size(shape, tile_size, grid_kwds)
+    label = _fig_name(xg, [y_obs, x_obs, cbar_obs])
+    fig = plt.figure(fig or label, size)
+    grid = axg.Grid(fig, 111, shape, **grid_kwds)
 
     axes_func = axes_func or axes_1d
     plot_kwds = deepcopy(plot_kwds) or {}
@@ -266,14 +269,13 @@ def _prepare_grid_kwds(grid_kwds, cbar=True):
         grid_kwds.setdefault("cbar_size", CBAR_SIZE)
 
 
-def _prepare_fig_grid(xg, shape, grid_class, label_obs, fig, tile_size, grid_kwds):
-    shape = shape[:2]
-    tile_size = tile_size or TILE_SIZE
-    label = getattr(xg, "name", "") + "/" + join_obs_names(*label_obs)
-    size = np.flip(shape) * (tile_size + grid_kwds["axes_pad"])  # just an estimate
-    fig = plt.figure(fig or label, size)
-    grid = grid_class(fig, 111, shape, **grid_kwds)
-    return fig, grid
+def _fig_size(shape, tile_size, grid_kwds):
+    # just an estimate
+    return np.flip(shape[:2]) * (tile_size or TILE_SIZE + grid_kwds["axes_pad"])
+
+
+def _fig_name(xg, label_obs):
+    return getattr(xg, "name", "") + "/" + join_obs_names(*label_obs)
 
 
 def report_2d(
@@ -317,9 +319,13 @@ def report_2d(
     dims = dict(zip(REPORT_2D_DIMS, [y_titles, x_titles]))
     xg, ug, (row_titles, col_titles) = _prepare_uids_grid(ug, dims)
     br_arrays = _prepare_arrays(len(dims), [ug, obs])
-    fig, grid = _prepare_fig_grid(
-        xg, br_arrays[0].shape, axg.ImageGrid, [obs], fig, tile_size, grid_kwds
-    )
+
+    # figure & axes
+    shape = br_arrays[0].shape[:2]
+    size = _fig_size(shape, tile_size, grid_kwds)
+    label = _fig_name(xg, [obs])
+    fig = plt.figure(fig or label, size)
+    grid = axg.ImageGrid(fig, 111, shape, **grid_kwds)
 
     br_ug, _ = br_arrays  # OPT do we really need the broadcasted ug here?
     label_cbar = obs.size == 1 or (obs.ndim == 2 and cbar_mode == "each")
@@ -365,7 +371,7 @@ def uniq_flat_mask(dat):
 
 
 def sm_from_obs(obs, us=None):
-    norm = getattr(obs, "norm", None)  # TODO from scale? see mpl.Colorizer.norm
+    norm = getattr(obs, "norm", None)  # TODO from scale? see mpl.Colorizer.norm (!)
     cmap = getattr(obs, "cmap", None)
     if us is not None:
         # copy because ScalarMappable(norm=my_norm).norm is my_norm
