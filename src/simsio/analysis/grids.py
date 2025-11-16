@@ -325,7 +325,7 @@ class UniformGrid:
             )
 
     @classmethod
-    def from_params(
+    def from_params(  # TODO merge into __init__, scale_extent is pointelss
         cls,
         extent: tuple[float, float],
         scale: ScaleLike,
@@ -334,12 +334,20 @@ class UniformGrid:
     ) -> Self:
         """Factory method mimicking :class:`LinearGrid`'s signature.
 
-        If 'scale_extent' is True, 'extent' is taken to be in scaled coordinates and
-        passed to :class:`LinearGrid` as-is, together with any keyword arguments.
         If 'scale_extent' is False (default), 'extent' is taken to be in data
         coordinates and converted to scaled coordinates internally. In this case,
         'extent' must be an interval [a, b] and 'origin' is ignored
         (a scalar extent only makes sense in linear scale).
+        If 'scale_extent' is True, 'extent' is taken to be in scaled coordinates and
+        passed to :class:`LinearGrid` as-is, together with any keyword arguments.
+        That is
+
+            UniformGrid.from_params(extent, scale, **lingrid_kwds, scale_extent=True)
+
+        is equivalent to
+
+            UniformGrid(LinearGrid(extent, **lingrid_kwds), scale)
+
 
         Exemples
         --------
