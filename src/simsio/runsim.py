@@ -89,7 +89,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     set_num_threads(args.ncores)
     if isinstance(sim_class, str):
         sim_class = get_module_attr(sim_class)
-    sim_kwargs.setdefault("readonly", False)
+    # sim_kwargs.setdefault("readonly", False)  # NOTE should we allow readonly from_config?
     try:
         sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
     except KeyError as e:  # TODO: custom exception, missing config file or uid?
