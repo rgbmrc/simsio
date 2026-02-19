@@ -15,7 +15,7 @@ import numpy as np
 import xarray as xr
 
 from simsio.analysis.utils import is_numeric, as_ndarray
-from simsio.simulations import get_sim
+from simsio.simulations import get_sim, purge_caches
 from simsio.utils import as_scalar
 
 __all__ = ["Function", "Measure", "id_", "indices_to_str"]
@@ -459,6 +459,9 @@ class Measure(Function):
         # measure**2 has itself as base, not measure (with filter=lambda x: x**2)
         # override _from.base (should we leave it?)
         attrs.setdefault("base", self)
+        registered_self = self._register.get(self.name, None)
+        if registered_self is not None and self.func is not registered_self.func:
+            purge_caches([registered_self])
         super().__init__(func, _from, **attrs)
 
     # def __init__(
