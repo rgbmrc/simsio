@@ -41,6 +41,10 @@ def get_cfg_dir():
     return Path(rc["configs"]["directory"])
 
 
+def reserved_uids():
+    return {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}
+
+
 # TODO use file cache for _config_path_history
 HISTORY_FILE = ".simsio_history"
 _config_path_history = deque(maxlen=100)
@@ -107,21 +111,20 @@ def _expand(config, templates):
 
 
 def cfg_load(uid, group=None, expand=True):
-    if uid in {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}:
+    if uid in reserved_uids():
         raise KeyError(f"Key {uid} is reserved")
     for path in cfg_glob(group):
         cfgs = yamlsf.load(path)
-        if cfgs and (cfg := cfgs.get(uid)):
-            while path in _config_path_history:
-                _config_path_history.remove(path)
-            _config_path_history.appendleft(path)
+        if cfgs and uid in cfgs:
             break
     else:
         raise KeyError(f"Simulation {uid} config not found")
-
+    while path in _config_path_history:
+        _config_path_history.remove(path)
+    _config_path_history.appendleft(path)
+    cfg = cfgs[uid] or {}  # if None then empty dict
     if expand:  # expand config via templates
         _expand(cfg, cfgs.get(rc["configs"]["header_tag"], {}))
-
     return path, cfg
 
 
