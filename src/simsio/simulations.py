@@ -245,8 +245,10 @@ class Simulation(Cache):
         return self.uid
 
     def _repr_html_(self):
-        path = self.handles["par"].storage
-        return f'<tt><a href="{path}">{self.uid}</a></tt>'
+        # TODO cfg_path:line, dyanimic keys
+        paths = (self.handles["par"].storage, self.handles["log"].storage)
+        links = map('[<a href="{}">{}</a>]'.format, paths, ("par", "log"))
+        return "<tt>" + "".join((self.uid, *links)) + "</tt>"
 
     def __copy__(self):
         new = super().__copy__()
