@@ -120,12 +120,8 @@ class YAMLSerializer(metaclass=SerializerMeta):
         self.yaml.default_flow_style = False
         self.yaml.representer.ignore_aliases = lambda *args: True
         self.yaml.representer.add_multi_representer(
-            np.integer,
-            lambda dumper, data: dumper.represent_int(data),
-        )
-        self.yaml.representer.add_multi_representer(
-            np.floating,
-            lambda dumper, data: dumper.represent_float(data),
+            np.generic,
+            lambda dumper, data: dumper.represent_data(data.item()),
         )
 
     def load(self, f):
