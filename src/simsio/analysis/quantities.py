@@ -459,10 +459,10 @@ class Measure(Function):
         # measure**2 has itself as base, not measure (with filter=lambda x: x**2)
         # override _from.base (should we leave it?)
         attrs.setdefault("base", self)
+        super().__init__(func, _from, **attrs)
         registered_self = self._register.get(self.name, None)
         if registered_self is not None and self.func is not registered_self.func:
             purge_caches([registered_self])
-        super().__init__(func, _from, **attrs)
 
     # def __init__(
     #     self, func, name=None, label=None, otypes=None, signature=None, **attrs
