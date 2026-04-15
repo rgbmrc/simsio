@@ -75,14 +75,14 @@ class LinearGrid:
         extent = np.squeeze(step * num if extent is None else extent)
         if extent.size == 1:  # extent = (b - a)
             extent = origin + extent * (np.arange(2) - anchor)
-        num = as_int(num or extent.ptp() / abs(step))
-        assert num > 1 and extent.size == 2 and extent.ptp() != 0
+        num = as_int(num or np.ptp(extent) / abs(step))
 
         self.num = num
         self.extent = np.array(extent, dtype=float)  # copy
-        self.step = self.extent.ptp() / self.num
+        self.step = np.ptp(self.extent) / self.num
         self.anchor = float(anchor)
         self.periodic = bool(periodic)
+        assert self.num > 1 and self.extent.size == 2 and self.step != 0
 
     @classmethod
     def from_points(cls, x: Sequence[float], periodic: bool = False) -> Self:
