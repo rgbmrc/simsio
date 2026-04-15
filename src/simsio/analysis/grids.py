@@ -76,8 +76,8 @@ class LinGrid(Grid):
         if extent.size == 1:
             extent = (origin or 0.0) + extent * (np.linspace(0, 1, 2) - (anchor or 0.0))
         assert extent[0] < extent[1]
-        self.n = _float_as_int(n or extent.ptp() / step)
-        self.step = extent.ptp() / self.n
+        self.n = _float_as_int(n or np.ptp(extent) / step)
+        self.step = np.ptp(extent) / self.n
         self.extent = extent
         self.periodic = bool(periodic)
 
