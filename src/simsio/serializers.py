@@ -115,20 +115,23 @@ class YAMLSerializer(metaclass=SerializerMeta):
     typ = "t"
     ext = ".yaml"
 
-    def __init__(self):
-        self.yaml = ryaml.YAML(typ="safe")
-        self.yaml.default_flow_style = False
-        self.yaml.representer.ignore_aliases = lambda *args: True
-        self.yaml.representer.add_multi_representer(
+    def _make(self):
+        # a YAML instance cannot be pickled/deepcopied
+        # if stored as an attribute, xarray.datarray.copy() breaks
+        yaml = ryaml.YAML(typ="safe")
+        yaml.default_flow_style = False
+        yaml.representer.ignore_aliases = lambda *args: True
+        yaml.representer.add_multi_representer(
             np.generic,
             lambda dumper, data: dumper.represent_data(data.item()),
         )
+        return yaml
 
     def load(self, f):
-        return {} if _eof(f) else self.yaml.load(f)
+        return {} if _eof(f) else self._make().load(f)
 
     def dump(self, d, f):
-        self.yaml.dump(d, f)
+        self._make().dump(d, f)
 
 
 # endregion

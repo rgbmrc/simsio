@@ -9,16 +9,17 @@ from simsio.simulations import Simulation
 
 
 class TeNPyYAMLSerializer(YAMLSerializer):
-    def __init__(self):
-        super().__init__()
-        self.yaml.representer.add_multi_representer(
+    def _make(self):
+        yaml = super()._make()
+        yaml.representer.add_multi_representer(
             Config,
             lambda dumper, d: dumper.represent_dict(d.as_dict()),
         )
-        self.yaml.representer.add_multi_representer(
+        yaml.representer.add_multi_representer(
             TruncationError,
             lambda dumper, d: dumper.represent_dict(vars(d)),
         )
+        return yaml
 
     def load(self, f):
         return asConfig(super().load(f), "Root")
