@@ -114,7 +114,7 @@ def cfg_load(uid, group=None, expand=True):
     if uid in reserved_uids():
         raise KeyError(f"Key {uid} is reserved")
     for path in cfg_glob(group):
-        cfgs = yamlsf.load(path)
+        cfgs = _cfg_read(path)
         if cfgs and uid in cfgs:
             break
     else:
@@ -129,12 +129,23 @@ def cfg_load(uid, group=None, expand=True):
 
 
 @contextmanager
-def cfg_lock(path):
-    with open(path, "r+") as f:
-        fcntl.lockf(f, fcntl.LOCK_EX)
-        logger.debug("Locked config %s", path)
-        yield f
-        fcntl.lockf(f, fcntl.LOCK_UN)  # probably superflous
+def cfg_lock(path, exclusive=True):
+    # lockf is advisory, all processes must actively use it
+    # lockf is preferable to flock on NFS
+    # shared readers "r", exclusive writers "r+"
+    with open(path, "r+" if exclusive else "r") as f:
+        fcntl.lockf(f, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        logger.debug("%s-locked config %s", "EX" if exclusive else "SH", path)
+        try:
+            yield f
+        finally:
+            fcntl.lockf(f, fcntl.LOCK_UN)
+
+
+def _cfg_read(path):
+    """Safe-load a config under a shared lock (blocks concurrent writers)."""
+    with cfg_lock(path, exclusive=False) as f:
+        return yamlsf.load(f)
 
 
 @contextmanager
@@ -219,23 +230,23 @@ def cfg_pop(*uids, group=None):
 def cfg_gen(template, params, glob=None):
     generated = {}
     for path in cfg_glob(glob):
-        configs = yamlrt.load(path)
-        header = configs[rc["configs"]["header_tag"]]
-        template = Template(header[template])
-        uids = generated[path.stem] = set()
-        try:
-            keys = params.keys()
-            vals = params.values()
-        except AttributeError:
-            pass
-        else:
-            params = [dict(zip(keys, vs)) for vs in product(*vals)]
-        for prev, ps in enumerate(params):
-            yml = template.substitute(ps, enum=prev + 1, prev=prev)
-            c = yamlrt.load(yml)
-            configs |= c
-            uids |= set(c)
-        yamlrt.dump(configs, path)
+        # hold exclusive lock across load and dump
+        with cfg_lock(path) as f, cfg_update(f) as configs:
+            header = configs[rc["configs"]["header_tag"]]
+            template = Template(header[template])
+            uids = generated[path.stem] = set()
+            try:
+                keys = params.keys()
+                vals = params.values()
+            except AttributeError:
+                pass
+            else:
+                params = [dict(zip(keys, vs)) for vs in product(*vals)]
+            for prev, ps in enumerate(params):
+                yml = template.substitute(ps, enum=prev + 1, prev=prev)
+                c = yamlrt.load(yml)
+                configs |= c
+                uids |= set(c)
     return generated
 
 
@@ -259,7 +270,7 @@ class SimsQuery:
             select = lambda u: valid_uuid(u) and self.select(u)  # noqa: E731
         # keeps any config that maches a glob, even if no selected uids
         return {
-            path_to_group(p): [*filter(select, yamlsf.load(p) or [])]
+            path_to_group(p): [*filter(select, _cfg_read(p) or [])]
             for glob in self.group_globs
             for p in cfg_glob(glob)
         }
