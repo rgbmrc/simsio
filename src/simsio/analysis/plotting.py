@@ -149,9 +149,10 @@ def report_1d(
     dims = dict(zip(REPORT_1D_DIMS, [y_titles, x_titles, None, cbar_obs]))
     xg, ug, (row_titles, col_titles, _, cbar_obs) = _prepare_uids_grid(ug, dims)
     br_arrays = _prepare_arrays(len(dims), [ug, x_obs, y_obs])  # TODO x/y order, cbar
+    ug = br_arrays[0]
 
     # figure & axes
-    shape = br_arrays[0].shape[:2]
+    shape = ug.shape[:2]
     size = _fig_size(shape, tile_size, grid_kwds)
     label = _fig_name(xg, [y_obs, x_obs, cbar_obs])
     fig = plt.figure(fig or label, size)
@@ -174,7 +175,7 @@ def report_1d(
     for ax, _ in zip(grid, grid_iter):
         us = ug[grid_iter.multi_index]
         axes_func(us, plot_iter, cbar_obs, plotting_func, plot_kwds, ax)
-        if br_arrays[0].shape[2] > 1:
+        if ug.shape[2] > 1:
             ax.legend()  # TODO cycler
     if cbar_obs:
         cbar_kwds = getattr(cbar_obs, "cbar_kwds", {})
@@ -248,6 +249,8 @@ def _prepare_uids_grid(ug, dims):
         xg = nest_grids(ug, dims.keys(), "dat")
     except TypeError:
         xg = None
+        dims = dims.values()
+        ug = np.expand_dims(ug, [i for i, dim in enumerate(dims) if not dim])
     else:
         # OPT modify dims in place instead?
         xg, dims = transpose_grid(xg, dims)
@@ -460,7 +463,7 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
         if obs.shape[0] > 1 and obs.shape[1] == 1:
             obs_titles = [o.string() for o in obs[:, 0]]
     ug_titles = []
-    if title is not None:
+    if title not in {None, ...}:
         title = np.atleast_1d(Function.get_array(title))
         ug = np.ma.masked_equal(ug, "")
         # TODO mixed Function/Measure?
