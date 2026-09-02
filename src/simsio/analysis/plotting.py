@@ -268,7 +268,7 @@ def report_2d(
     # only need this in grid_titles (which already calls get_array)
     # x_titles = Function.get_array(x_titles)
     # y_titles = Function.get_array(y_titles)
-    obs_ndim = obs.ndim
+    obs_ndim = getattr(obs, "ndim", 1)
     iter_arrays = (ug, obs)
     ndim = max(2, *(np.ndim(a) for a in iter_arrays))
     iter_arrays = (ug, obs) = [append_til_ndim(a, ndim) for a in iter_arrays]
