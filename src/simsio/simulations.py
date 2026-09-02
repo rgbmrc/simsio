@@ -47,7 +47,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-sim_registry = {}
+sim_registry: dict[str, "Simulation"] = {}
 
 
 def valid_uuid(uid=None, raise_invalid=False):
@@ -265,11 +265,11 @@ class Simulation(Cache):
         return new
 
     def purge_cache(self, keys=None):
-        if keys is not None:
+        if keys is None:
+            self.cache.clear()
+        else:
             for k in keys:
                 self.cache.pop(k, None)
-        else:
-            self.cache.clear()
 
     def runtime_info(self, ext_cpu_time=0.0):
         """Integrates simulation params with runtime info and returns it."""
