@@ -1,6 +1,5 @@
 import numpy as np
 from matplotlib import colors, ticker
-import cmcrameri.cm as ccm  # DEL
 import mplotter as plotter  # DEL
 
 from simsio.analysis.quantities import Function, Measure, id_, nomath
@@ -32,10 +31,10 @@ __all__ = [
     "fourier",
 ]
 
-re_or_im_attrs = {"cmap": ccm.vik_r, "norm": colors.CenteredNorm()}
+re_or_im_attrs = {"cmap": "bwr_r", "norm": colors.CenteredNorm()}
 dev_attrs = {"cmap": "RdBu", "norm": colors.CenteredNorm()}
 arg_attrs = {
-    "cmap": "twilight_shifted_r",
+    "cmap": "twilight",
     "norm": colors.Normalize(-np.pi, +np.pi),
     "cbar_kwds": {
         "ticks": ticker.MultipleLocator(np.pi),
