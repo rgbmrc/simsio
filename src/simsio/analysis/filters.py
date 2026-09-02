@@ -38,7 +38,7 @@ arg_attrs = {
     "norm": colors.Normalize(-np.pi, +np.pi),
     "cbar_kwds": {
         "ticks": ticker.MultipleLocator(np.pi),
-        "format": plotter.annotating.SSFractionFormatter(1, unit=(np.pi, "\pi")),
+        "format": plotter.annotating.SSFractionFormatter(1, unit=(np.pi, r"\pi")),
     },
 }
 
@@ -72,7 +72,7 @@ def re_and_im(measure: Measure) -> Measure:
     return measure @ re_, measure @ im_
 
 
-@Function.register(label="$\|${x}$\|$".format, cmap="viridis", norm=None)
+@Function.register(label=r"$\|${x}$\|$".format, cmap="viridis", norm=None)
 def norm_(x, *, ndim=None, axis=None, ord=2):
     # OPT optimize a little bit
     if ord == 1:
