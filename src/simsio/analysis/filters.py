@@ -97,10 +97,16 @@ def adev(x):
     return y - ref
 
 
+adev_log = Measure(adev, scale="log")
+
+
 @Function.register(label=r"{x}$\text{{ rel. dev.}}$".format, **dev_attrs)
 def rdev(x):
     y, ref = get_dev_operands(x)
     return y / np.abs(ref) - np.sign(ref)
+
+
+rdev_log = Measure(rdev, scale="log")
 
 
 @Function.register(label=r"$\mathcal{F}$")
