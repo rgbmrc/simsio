@@ -2,30 +2,30 @@ import logging
 from copy import copy, deepcopy
 from itertools import filterfalse
 
-import matplotlib.pyplot as plt
-import numpy as np
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 import mpl_toolkits.axes_grid1 as axg
-from matplotlib import rcParams, colors, ticker, cm, transforms
+import numpy as np
+from matplotlib import cm, colors, rcParams, ticker, transforms
 
-from simsio.analysis.quantities import Function, Measure
 from simsio.analysis.grids import LinearGrid, UniformGrid, bin_edges
 from simsio.analysis.organize import nest_grids, transpose_grid
+from simsio.analysis.quantities import Function, Measure
 from simsio.analysis.utils import sanitize_path
 
 __all__ = [
-    "grid_titles",
-    "plot_1d_data",
-    "plot_2d_data",
-    "axes_1d",
-    "report_1d",
-    "report_2d",
-    "join_obs_names",
-    "sanitize_fig_name",
-    "sm_from_obs",
-    "autoscale_norms",
     "annotate_image_axis",
     "apply_obs_props",
+    "autoscale_norms",
+    "axes_1d",
+    "grid_titles",
+    "join_obs_names",
+    "plot_1d_data",
+    "plot_2d_data",
+    "report_1d",
+    "report_2d",
+    "sanitize_fig_name",
+    "sm_from_obs",
 ]
 
 logger = logging.getLogger(__name__)
@@ -440,7 +440,7 @@ def autoscale_norms(obs, ug, agg_axs=None):
 
 
 def join_obs_names(*obs, sep=",", junc="_vs_"):
-    return junc.join((sep.join((o.name for o in np.ravel(os) if o)) for os in obs))
+    return junc.join(sep.join(o.name for o in np.ravel(os) if o) for os in obs)
 
 
 def sanitize_fig_name(fig):
@@ -520,19 +520,19 @@ def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
     if loc == "bottom":
         x, y = 0.5, 0.0
         dx, dy = 0.0, -labelpad
-        defaults = dict(ha="center", va="top")
+        defaults = {"ha": "center", "va": "top"}
     elif loc == "top":
         x, y = 0.5, 1.0
         dx, dy = 0.0, labelpad
-        defaults = dict(ha="center", va="bottom")
+        defaults = {"ha": "center", "va": "bottom"}
     elif loc == "left":
         x, y = 0.0, 0.5
         dx, dy = -labelpad, 0.0
-        defaults = dict(ha="right", va="center", rotation=90)
+        defaults = {"ha": "right", "va": "center", "rotation": 90}
     elif loc == "right":
         x, y = 1.0, 0.5
         dx, dy = labelpad, 0.0
-        defaults = dict(ha="left", va="center", rotation=90)
+        defaults = {"ha": "left", "va": "center", "rotation": 90}
     else:
         raise ValueError("loc must be one of 'left', 'right', 'top', 'bottom'")
 

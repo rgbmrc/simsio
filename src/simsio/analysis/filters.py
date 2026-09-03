@@ -1,11 +1,11 @@
+import mplotter as plotter  # DEL
 import numpy as np
 from matplotlib import colors, ticker
-import mplotter as plotter  # DEL
 
-from simsio.analysis.quantities import Function, Measure, id_, nomath
 from simsio.analysis.numpy_extras import fftsymshift
+from simsio.analysis.quantities import Function, Measure, id_, nomath
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "id_",
     # basic
     "re_",
@@ -27,6 +27,8 @@ __all__ = [
     # abs & rel deviation
     "adev",
     "rdev",
+    "adev_log",
+    "rdev_log",
     # fourier
     "fourier",
 ]
