@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 # TODO move to mplotter/config
 TILE_SIZE = 1.33
 AXES_PAD = 0.1
+# (horizontal, vertical) pad between tiles that carry their own tick labels
+# (see _label_unshared); asymmetric because tick labels are wider than tall
+TICKLABELS_PAD = (0.4, 0.3)
 CBAR_SIZE = 0.1
 MAX_DIGITIZED = 12
 
@@ -157,6 +160,7 @@ def report_1d(
     label = _fig_name(xg, [y_obs, x_obs, cbar_obs])
     fig = plt.figure(fig or label, size)
     grid = axg.Grid(fig, 111, shape, **grid_kwds)
+    _label_unshared(grid, grid_kwds)
 
     axes_func = axes_func or axes_1d
     plot_kwds = deepcopy(plot_kwds) or {}
@@ -265,16 +269,47 @@ def _prepare_arrays(ndims, it_arrays):
     return [*map(np.transpose, br_arrays)]
 
 
+def _shared_axes(grid_kwds):
+    """(share_x, share_y) as axg.Grid will understand them."""
+    share_all = grid_kwds.get("share_all", False)
+    return (
+        share_all or grid_kwds.get("share_x", True),
+        share_all or grid_kwds.get("share_y", True),
+    )
+
+
 def _prepare_grid_kwds(grid_kwds, cbar=True):
-    grid_kwds.setdefault("axes_pad", AXES_PAD)
+    share_x, share_y = _shared_axes(grid_kwds)
+    # unshared axes keep their tick labels (_label_unshared): make room for them
+    grid_kwds.setdefault(
+        "axes_pad",
+        (
+            AXES_PAD if share_y else TICKLABELS_PAD[0],
+            AXES_PAD if share_x else TICKLABELS_PAD[1],
+        ),
+    )
     if cbar:
         grid_kwds.setdefault("cbar_pad", AXES_PAD)
         grid_kwds.setdefault("cbar_size", CBAR_SIZE)
 
 
+def _label_unshared(grid, grid_kwds):
+    """Restore the tick labels that Grid's label_mode drops on inner tiles when
+    the corresponding axis is not shared, hence has its own limits. Axis labels
+    stay on the edges."""
+    if grid_kwds.get("label_mode", "L") != "L":
+        return
+    share_x, share_y = _shared_axes(grid_kwds)
+    labels = [("labelbottom", share_x), ("labelleft", share_y)]
+    kwds = {k: True for k, shared in labels if not shared}
+    for ax in grid:
+        ax.tick_params(**kwds)
+
+
 def _fig_size(shape, tile_size, grid_kwds):
     # just an estimate
-    return np.flip(shape[:2]) * (tile_size or TILE_SIZE + grid_kwds["axes_pad"])
+    pad = np.asarray(grid_kwds["axes_pad"], float)  # (horizontal, vertical)
+    return np.flip(shape[:2]) * (tile_size or TILE_SIZE + pad)
 
 
 def _fig_name(xg, label_obs):

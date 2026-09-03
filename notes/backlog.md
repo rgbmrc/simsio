@@ -21,6 +21,10 @@ once the library is mature enough for one. Absorbs the former `ideas.md`.
   measures sharing a name collide. `Measure.__init__` papers over this by purging
   caches on redefinition; the warning about overwriting is currently suppressed
   (`quantities.py`, "output a sensible amount of warnings").
+- `plotting.grid_titles` places row/column titles with `add_axis_label`, which pads
+  from the axes edge only: the row title lands on top of the y-axis label (and, with
+  unshared axes, of the tick labels). Needs a bbox including ticks/ticklabels/label
+  (`TODO` in `add_axis_label`), or `fig.align_labels`-style post-placement.
 - `filters.sqrt_`/`mean_` labels: `nomath` in the label breaks non-math text
   (marked FIXME in source).
 
