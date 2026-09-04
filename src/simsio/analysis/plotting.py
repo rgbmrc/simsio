@@ -184,11 +184,12 @@ def report_1d(
     for ax in grid:
         if not ax.lines:
             ax.axis("off")
-    grid_titles(grid.axes_row[0], "top", ug, col_titles)
-    grid_titles(grid.axes_column[0], "left", ug, row_titles)
     # an explicit axes_pad is left alone
     if "axes_pad" in defaults and _needs_pad_fit(grid, grid_kwds):
         _fit_axes_pad(fig, grid, grid_kwds, tile_size)
+    # after the fit: the titles clear the decorations of the final layout
+    grid_titles(grid.axes_row[0], "top", ug, col_titles)
+    grid_titles(grid.axes_column[0], "left", ug, row_titles)
     return fig, grid
 
 
@@ -302,16 +303,26 @@ def _label_unshared(grid, grid_kwds):
         ax.tick_params(**kwds)
 
 
+SIDES = ("left", "bottom", "right", "top")
+
+
 def _overhangs(ax):
     """Room (inches) the decorations of `ax` take outside its frame, ordered as
-    (left, bottom, right, top). Cheaper than a draw: get_tightbbox() runs the
-    locators and places the labels by itself."""
+    SIDES. Cheaper than a draw: get_tightbbox() runs the locators and places the
+    labels by itself."""
     bb = ax.get_tightbbox()
     fr = ax.bbox
     if bb is None:  # invisible axes
         return np.zeros(4)
     over = [fr.x0 - bb.x0, fr.y0 - bb.y0, bb.x1 - fr.x1, bb.y1 - fr.y1]
     return np.clip(over, 0, None) / ax.figure.dpi
+
+
+def _decorations_pad(axs, pos):
+    """Points to clear whatever `axs` already draw on their `pos` side. Shared by
+    the whole row/column, so that what is placed past it stays aligned."""
+    over = max(_overhangs(ax)[SIDES.index(pos)] for ax in axs)
+    return 72 * over  # ScaledTranslation and labelpad work in points
 
 
 def _needs_pad_fit(grid, grid_kwds):
@@ -552,8 +563,11 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
             ug_titles = map("\n".join, np.broadcast(obs_titles, ug_titles))
         else:
             ug_titles = obs_titles
+    # one pad for the whole row/column, so that the titles line up
+    pad = rcParams["axes.labelpad"] + _decorations_pad(axs, pos)
     for ax, t in zip(axs, ug_titles):
-        setattr(ax, ("y" if vertical else "x") + "_title", add_axis_label(ax, t, pos))
+        label = add_axis_label(ax, t, pos, labelpad=pad)
+        setattr(ax, ("y" if vertical else "x") + "_title", label)
 
 
 def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
@@ -588,7 +602,8 @@ def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
         labelpad = rcParams["axes.labelpad"]  # in points
 
     labelpad = labelpad / 72.0  # ScaledTranslation expects inches
-    # TODO is there a bounding box including ticks and tick labels?
+    # the pad is from the axes frame: to clear ticks, tick labels and axis label,
+    # pass labelpad from _decorations_pad (as grid_titles does)
 
     if loc == "bottom":
         x, y = 0.5, 0.0

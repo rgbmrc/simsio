@@ -72,14 +72,29 @@ usually carry the same marker.
 
 ## analysis: plotting
 
-- 🩹 `grid_titles` places row/column titles with `add_axis_label`, which pads from
-  the axes edge only: the row title lands on top of the y-axis label (and, with
-  unshared axes, of the tick labels). Needs a bbox including
-  ticks/ticklabels/label (`TODO` in `add_axis_label`), or `fig.align_labels`-style
-  post-placement. A layout engine would *not* fix this on its own: these titles are
-  bare `ax.text`, which no engine accounts for. Making column titles real
-  `ax.set_title` and row titles the `ylabel` of the last column (label on the right)
-  would, and would help under `axg.Grid` too.
+- 🩹 the figure size ignores whatever the grid draws *outside* its tiles — row and
+  column titles, the edge axis labels, the colorbar — so those clip in a plain
+  `savefig` (inline backends and `bbox_inches="tight"` hide the problem). Related:
+  `TILE_SIZE` is not the size a tile gets, since the `SubplotDivider` lays the grid
+  out inside the fractional subplot margins. Both go away by measuring the outer
+  overhangs (as `grid_titles` already does per side), sizing the figure as
+  `margins + tiles + pads (+ cbar)` and pinning the divider rect to those margins in
+  figure fractions.
+- 💡 grid titles are bare `ax.text` placed by `add_axis_label`, past the decorations
+  measured on that side. That is deliberate — it is uniform across the four sides,
+  and it keeps the titles of a row/column whose tile was switched off
+  (`ax.axis("off")`) — but it is a one-shot measurement, and no layout engine
+  accounts for a bare `Text`. Under a constrained-layout backend they would have to
+  become real decorators: `ax.set_title` for the column titles, and for the row
+  titles the `ylabel` of the last column (`label_position="right"`) or a
+  label-only `secondary_yaxis`. Note both then need a *free* side, which the
+  colorbar of `report_1d`/`report_2d` may well be occupying.
+- 🩹 `report_2d` places its grid titles before plotting the images, so the
+  `_decorations_pad` measurement finds bare axes and the titles end up on top of the
+  tick labels `annotate_image_axis` adds later. Moving the two `grid_titles` calls
+  after the plotting loop fixes it, but they read `obs` *before* `autoscale_norms`
+  broadcasts it, which changes which obs titles they emit — needs a `report_2d` case
+  to test against (none in `umps-tests`).
 - 🚧 the `report_nd` refactor was left half-done (commit `3446645`, "bad partial
   refactor"); the ugrid/xarray axis transposition in `transpose_grid` is the
   fragile part.
