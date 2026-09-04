@@ -135,6 +135,7 @@ def report_1d(
     axes_func=None,
     tile_size=None,
     plot_kwds=None,
+    y_side=None,
     fig=None,
     **grid_kwds,
 ):
@@ -150,20 +151,27 @@ def report_1d(
     xg, ug, (row_titles, col_titles, _, cbar_obs) = _prepare_uids_grid(ug, dims)
     br_arrays = _prepare_arrays(len(dims), [ug, x_obs, y_obs])  # TODO x/y order, cbar
     ug = br_arrays[0]
+    # y labels opposite the row titles, which grid_titles puts on the left
+    y_side = y_side or ("right" if row_titles not in {None, ...} else "left")
 
     # figure & axes
     shape = ug.shape[:2]
     size = _fig_size(shape, tile_size, grid_kwds)
     label = _fig_name(xg, [y_obs, x_obs, cbar_obs])
     fig = plt.figure(fig or label, size)
+    # mpl's label_mode is hardwired to the bottom-left: use ours unless asked
+    if own_labels := "label_mode" not in grid_kwds:
+        grid_kwds["label_mode"] = "keep"
     grid = axg.Grid(fig, 111, shape, **grid_kwds)
-    _label_unshared(grid, grid_kwds)
+    if own_labels:
+        _label_grid(grid, grid_kwds, y_side)
 
     axes_func = axes_func or axes_1d
     plot_kwds = deepcopy(plot_kwds) or {}
     if cbar_obs:  # TODO support multiple colorbars
         div = grid.get_divider()
-        div.append_size("right", axg.Size.Fixed(cbar_pad))
+        grid.cbar_pad = axg.Size.Fixed(cbar_pad)  # grown by _fit_axes_pad
+        div.append_size("right", grid.cbar_pad)
         div.append_size("right", axg.Size.Fixed(cbar_size))
         cax_locator = div.new_locator(nx=-2, nx1=-1, ny=0, ny1=-1)
         grid.cax = fig.add_subplot(axes_locator=cax_locator)
@@ -290,20 +298,24 @@ def _prepare_grid_kwds(grid_kwds, cbar=True):
     return set(grid_kwds) - given
 
 
-def _label_unshared(grid, grid_kwds):
-    """Restore the tick labels that Grid's label_mode drops on inner tiles when
-    the corresponding axis is not shared, hence has its own limits. Axis labels
-    stay on the edges."""
-    if grid_kwds.get("label_mode", "L") != "L":
-        return
-    share_x, share_y = _shared_axes(grid_kwds)
-    labels = [("labelbottom", share_x), ("labelleft", share_y)]
-    kwds = {k: True for k, shared in labels if not shared}
-    for ax in grid:
-        ax.tick_params(**kwds)
-
-
 SIDES = ("left", "bottom", "right", "top")
+
+
+def _label_grid(grid, grid_kwds, y_side="left", x_side="bottom"):
+    """Ticks on the given sides of the grid, axis labels on the edge tile there,
+    tick labels on that edge too -- or on every tile of an unshared direction,
+    each having its own scale. Replaces Grid's label_mode, which can only label
+    the bottom row and the left column."""
+    nrows, ncols = grid.get_geometry()
+    edges = {"top": 0, "bottom": nrows - 1, "left": 0, "right": ncols - 1}
+    shared = dict(zip((x_side, y_side), _shared_axes(grid_kwds)))
+    for (i, j), ax in np.ndenumerate(np.array(grid.axes_row, object)):
+        for axis, side, k in ((ax.xaxis, x_side, i), (ax.yaxis, y_side, j)):
+            axis.set_ticks_position(side)  # also moves the tick labels
+            axis.set_label_position(side)
+            edge = k == edges[side]
+            axis.set_tick_params(**{"label" + side: edge or not shared[side]})
+            axis.label.set_visible(edge)  # set later by axes_1d, but not shown
 
 
 def _overhangs(ax):
@@ -327,8 +339,11 @@ def _decorations_pad(axs, pos):
 
 def _needs_pad_fit(grid, grid_kwds):
     """Whether anything can reach into the gaps between the tiles: tick labels,
-    which unshared axes carry on every tile (_label_unshared), or an offset text,
-    which any tile can carry above (y) or right of (x) its frame."""
+    which unshared axes carry on every tile (_label_grid), or an offset text,
+    which any tile can carry above (y) or right of (x) its frame. The colorbar
+    pad is a gap too, and the last column may well label its right side."""
+    if hasattr(grid, "cbar_pad") and grid[0].yaxis.get_label_position() == "right":
+        return True
     if grid.get_geometry() == (1, 1):  # no gaps
         return False
     if not all(_shared_axes(grid_kwds)):
@@ -352,7 +367,15 @@ def _fit_axes_pad(fig, grid, grid_kwds, tile_size):
     v_pad = AXES_PAD + (over[:-1, :, 1] + over[1:, :, 3]).max(initial=0)
     grid_kwds["axes_pad"] = (h_pad, v_pad)
     grid.set_axes_pad(grid_kwds["axes_pad"])
-    fig.set_size_inches(_fig_size(grid.get_geometry(), tile_size, grid_kwds))
+    cbar_pad = getattr(grid, "cbar_pad", None)
+    # the colorbar too must clear what the last column draws on its right
+    grown = over[:, -1, 2].max() if cbar_pad else 0.0
+    if grown:
+        cbar_pad.fixed_size += grown
+    # the figure never accounted for the colorbar: at least do not shrink the tiles
+    fig.set_size_inches(
+        _fig_size(grid.get_geometry(), tile_size, grid_kwds) + [grown, 0]
+    )
 
 
 def _fig_size(shape, tile_size, grid_kwds):

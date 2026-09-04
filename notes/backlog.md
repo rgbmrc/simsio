@@ -72,9 +72,15 @@ usually carry the same marker.
 
 ## analysis: plotting
 
+- 🐛 `report_1d(..., y_titles=None)` raises `x and y must have same first dimension`
+  from `plot_1d_data`: dropping the row dimension leaves `_prepare_arrays`
+  broadcasting `x_obs` against a grid axis that `y_obs` does not have. Happens with
+  both a scalar and an array `x_obs`, and predates the layout work
+  (`analysis/verify_model.py` calls it that way).
 - 🩹 the figure size ignores whatever the grid draws *outside* its tiles — row and
   column titles, the edge axis labels, the colorbar — so those clip in a plain
-  `savefig` (inline backends and `bbox_inches="tight"` hide the problem). Related:
+  `savefig` (inline backends and `bbox_inches="tight"` hide the problem).
+  `_fit_axes_pad` only compensates the width it adds to the colorbar pad. Related:
   `TILE_SIZE` is not the size a tile gets, since the `SubplotDivider` lays the grid
   out inside the fractional subplot margins. Both go away by measuring the outer
   overhangs (as `grid_titles` already does per side), sizing the figure as
