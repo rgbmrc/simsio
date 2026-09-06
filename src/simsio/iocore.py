@@ -1,11 +1,9 @@
-from copy import copy
-from functools import cache
 import logging
 from collections import UserDict, namedtuple
-from importlib import import_module
+from copy import copy
 from pathlib import Path
 
-from .utils import get_module_attr
+from simsio.utils import get_module_attr
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,6 @@ class IOHandler:
             return p + bak  # p string
 
     def link(self, key, path, write_mode, serializer):
-
         if isinstance(serializer, str):
             serializer = get_module_attr(serializer)()
 
@@ -89,7 +86,7 @@ class Cache(UserDict, IOHandler):
         return super().__getitem__(key)
 
     def __setitem__(self, key, val):
-        if not key in self.handles:
+        if key not in self.handles:
             raise KeyError(f"Cannot set unlinked IO handle {key}")
         super().__setitem__(key, val)
 

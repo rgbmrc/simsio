@@ -1,16 +1,14 @@
-import os
 import logging
-from collections import ChainMap, defaultdict
+from collections import defaultdict
 from inspect import signature
 from itertools import chain
 from pathlib import Path
 
-import dpath
 import numpy as np
 import qtealeaves as qtea
 from qtealeaves import map_selector
-from qtealeaves.observables import TNObservables
 from qtealeaves.convergence_parameters import TNConvergenceParameters
+from qtealeaves.observables import TNObservables
 
 from simsio.simulations import Simulation
 
@@ -63,7 +61,6 @@ def unravel(obs1d, lvals, *, ndim=0, map_type="HilbertCurveMap", argmap=None):
 
 
 class QuantumGreenTeaSimulation(Simulation):
-
     unravel_classes = {"TNObsLocal", "TNObsCorr"}
 
     def __init__(self, *args, **kwargs):

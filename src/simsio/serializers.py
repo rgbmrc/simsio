@@ -16,8 +16,8 @@
 import json
 import pickle
 
-import ruamel.yaml as ryaml
 import numpy as np
+import ruamel.yaml as ryaml
 
 
 def _eof(f):

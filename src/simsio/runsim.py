@@ -1,3 +1,5 @@
+# ruff: noqa: F401 # TODO imports as reminders
+
 import argparse
 import ctypes
 import logging
@@ -11,10 +13,10 @@ from ctypes.util import find_library
 import numpy as np
 
 from simsio import rc
-from simsio.utils import get_module_attr
 from simsio.simulations import Simulation
+from simsio.utils import get_module_attr
 
-__all__ = ["argparse", "run_sim"]
+__all__ = ["run_sim", "set_num_threads"]
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +107,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
         # TODO: this does not work for handles previously removed from cache
         if not args.save_extras:
             for key in sim:
-                if not key in rc["IO-handlers"]:
+                if key not in rc["IO-handlers"]:
                     sim.unlink(key)
     except:
         logger.exception("Uncaught exception while running simulation")

@@ -1,5 +1,6 @@
 """
 **Abbreviations**
+
  - sim: simulation
  - uid: simulation identifier (human provided key or computer generated uuid)
 
@@ -14,39 +15,40 @@
  cfg  | config   | I   | txt | subset of par provided as user input
 """
 
-import fcntl
 import logging
 import logging.config
-import re
 import shlex
 import sys
 import time
 import uuid
-from collections import defaultdict, deque
-from contextlib import contextmanager
-from functools import cached_property, wraps
-from itertools import chain, product
-from pathlib import Path
-from shutil import rmtree
+from functools import wraps
 from string import Template
 from subprocess import run
 
 import dictdiffer
 import dpath
 import numpy as np
-import ruamel.yaml as yaml
 
-from simsio.config import rc
+from simsio.configs import cfg_load, cfg_update_uid
 from simsio.iocore import Cache
+from simsio.settings import rc
+
+__all__ = [
+    "Simulation",
+    "get_sim",
+    "sim_or_uid_arg",
+    "purge_registry",
+    "purge_caches",
+    "valid_uuid",
+    "sim_registry",
+]
 
 logger = logging.getLogger(__name__)
 
-yamlsf = yaml.YAML(typ="safe")
-yamlrt = yaml.YAML(typ="rt")
-yamlrt.width = 8192
+sim_registry = {}
 
 
-def _valid_uuid(uid=None, raise_invalid=False):
+def valid_uuid(uid=None, raise_invalid=False):
     """
     Returns and/or check the validity of a UUID (universally unique identifier).
 
@@ -78,24 +80,9 @@ def _valid_uuid(uid=None, raise_invalid=False):
     return str(uid).replace("-", "")
 
 
-UID_DTYPE = np.array(_valid_uuid()).dtype
-CFG_EXT = ".yaml"
-
-
-def get_cfg_dir():
-    return Path(rc["configs"]["directory"])
-
-
-# TODO: use file cache for _config_path_history
-HISTORY_FILE = ".simsio_history"
-_config_path_history = deque(maxlen=100)
-
-sim_registry = {}
-
-
 def purge_registry(sims=None):
     if sims is not None:
-        for s in np.ravel(sims):
+        for s in sims:
             if isinstance(s, Simulation):
                 s = s.uid
             sim_registry.pop(s, None)
@@ -108,127 +95,12 @@ def purge_caches(keys=None):
         s.purge_cache(keys)
 
 
-def sim_or_uid_arg(fun_sim):
-    @wraps(fun_sim)
-    def fun_sim_or_uid(sim, *args, **kwargs):
-        return fun_sim(get_sim(sim), *args, **kwargs)
-
-    return fun_sim_or_uid
-
-
-@sim_or_uid_arg
-def extract_text(sim, key, regex, reverse=False, op="search"):
-    d = sim[key]
-    if reverse:
-        d = "\n".join(reversed(d.splitlines()))
-    return getattr(re.compile(regex), op)(d)
-
-
-@sim_or_uid_arg
-def extract_dict(sim, key, glob, op=None):
-    op = op or dpath.get
-    return op(sim[key], glob)
-
-
-def glob_groups(pattern=None, cron=False):
-    """
-    Returns the paths of config files matching a glob.
-
-    Parameters
-    ----------
-    group : str, optional
-        Glob pattern to match (extension excluded), by default '*
-    configs_dir : str, optional
-        Directory where to look for config files, by default CONFIGS_DIR
-    configs_ext : str, optional
-        Extension of config files, by default CONFIGS_EXT
-
-    Returns
-    -------
-    list[Path]
-        Paths of matching config files, ordered chronologically, from the most recently used process
-    """
-    pattern = (pattern or "**/*") + CFG_EXT
-    paths = get_cfg_dir().glob(pattern)
-    if cron:
-        paths = set(paths)
-        paths = chain(
-            (p for p in _config_path_history if p in paths),
-            (p for p in paths if not p in _config_path_history),
-        )
-    return paths
-
-
-def path_to_group(p):
-    return str(p.relative_to(get_cfg_dir()).with_suffix(""))
-
-
-def group_to_path(g):
-    return Path(get_cfg_dir(), g).with_suffix(CFG_EXT)
-
-
-class SimsQuery:
-    def __init__(self, *group_globs, valid_uuid=True):
-        self.group_globs = group_globs or ["**/*"]
-        self.valid_uuid = valid_uuid
-        if self.valid_uuid:
-            # hardcoded default for backward compatibility with old .simsiorc files
-            # TODO remove when default rc file is deployed
-            uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
-            uid_filter = re.compile(uuid_regex, re.S).fullmatch
-        else:
-            uid_filter = rc["configs"]["header_tag"].__ne__
-        self.groups = {
-            path_to_group(p): set(filter(uid_filter, cfg))
-            for glob in self.group_globs
-            for p in glob_groups(glob)
-            if (cfg := yamlsf.load(p))  # skip non-iterable empty yaml (=None)
-        }
-
-    @cached_property
-    def uids(self):
-        return {u: g for g, us in self.groups.items() for u in us}
-
-    def __iter__(self):
-        return iter(self.uids)
-
-    def __len__(self):
-        return len(self.uids)
-
-    def __repr__(self):
-        args = f"group_globs={self.group_globs}, valid_uuid={self.valid_uuid}"
-        return f"{type(self).__name__}({args})"
-
-
-def gen_configs(template, params, glob=None):
-    generated = {}
-    for path in glob_groups(glob):
-        configs = yamlrt.load(path)
-        header = configs[rc["configs"]["header_tag"]]
-        template = Template(header[template])
-        uids = generated[path.stem] = set()
-        try:
-            keys = params.keys()
-            vals = params.values()
-        except AttributeError:
-            pass
-        else:
-            params = [dict(zip(keys, vs)) for vs in product(*vals)]
-        for prev, ps in enumerate(params):
-            yml = template.substitute(ps, enum=prev + 1, prev=prev)
-            c = yamlrt.load(yml)
-            configs |= c
-            uids |= set(c)
-        yamlrt.dump(configs, path)
-    return generated
-
-
 def get_sim(sim_or_uid, group=None):
     """
     Retreives a simulation from the register, building it if not already present.
 
-    The eventual Simulation initialization uses default arguments
-    (except for group, if provided).
+    The eventual Simulation initialization uses default arguments (except for group, if
+    provided).
     """
     if isinstance(sim_or_uid, Simulation) or sim_or_uid is np.ma.masked:
         return sim_or_uid
@@ -242,203 +114,22 @@ def get_sim(sim_or_uid, group=None):
     return sim_registry[sim_or_uid]
 
 
-def _get_params_vals(sims, keys):
-    try:
-        sims = sims.items()
-    except AttributeError:
-        sims = ((s,) for s in sims)
-    pars = (get_sim(*sim).par for sim in sims)
-    keys = list(keys)  # copy
-    for i, k in enumerate(keys):
-        if isinstance(k, str):
-            keys[i] = (k, dpath._DEFAULT_SENTINEL)
-    vals = [[dpath.get(p, k, default=d) for k, d in keys] for p in pars]
-    return tuple(zip(*vals)), keys
+def sim_or_uid_arg(fun_sim):
+    @wraps(fun_sim)
+    def fun_sim_or_uid(sim, *args, **kwargs):
+        return fun_sim(get_sim(sim), *args, **kwargs)
 
-
-def uids_sort(sims, keys, return_vals=False):
-    """
-    Sorts a set of uids in lexicographic order according to the values of the given
-    parmeters.
-
-    Parameters
-    ----------
-    uids : [type]
-        [description]
-    keys : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    sims = list(sims)
-    vals, keys = _get_params_vals(sims, keys)
-    idxs = np.lexsort(vals[::-1])
-    sims = [sims[i] for i in idxs]
-    if return_vals:
-        vals = tuple(zip(*vals))
-        vals = [vals[i] for i in idxs]
-        return sims, vals
-    return sims
-
-
-def uids_grid(sims, keys):
-    # TODO: aliases for paths
-    vals, keys = _get_params_vals(sims, keys)
-    idxs = np.empty((len(keys), len(sims)), dtype=np.intp)
-    uniq = {}
-    for j, ((k, d), v) in enumerate(zip(keys, vals)):
-        u, i = np.unique(v, return_inverse=True)
-        uniq[k] = u
-        idxs[j] = i
-    idxs = idxs.T
-    grid = np.empty([len(u) for u in uniq.values()], dtype=UID_DTYPE)
-    # grid = np.ma.masked_all([len(u) for u in uniq.values()], dtype=UID_DTYPE, fill_value='')
-    for i, s in zip(idxs, sims):
-        grid[tuple(i)] = getattr(s, "uid", s)
-    return grid, uniq
-
-
-def sort_config(glob, keys):
-    tag = rc["configs"]["header_tag"]
-    for p in glob_groups(glob):
-        with lock_config(p) as f:
-            with update_config(f) as cfg:
-                header = cfg.pop(tag, None)
-                for u in reversed(uids_sort(cfg, keys)):
-                    cfg.insert(0, u, cfg.pop(u))
-                if header:
-                    cfg.insert(0, tag, header)
-
-
-def pop(*uids, group=None):
-    cfgs_paths = defaultdict(set)
-    for u in uids:  # TODO: use SimsQuery
-        p, _ = load_config(u, group, expand=False)
-        cfgs_paths[p].add(u)
-    for p, us in cfgs_paths.items():
-        with lock_config(p) as f:
-            with update_config(f) as cfg:
-                for u in us:
-                    for h in rc["IO-handlers"].values():
-                        glob = h.split(",")[0].strip()
-                        glob = Template(glob).substitute(uid=u, key="*")
-                        for p in Path(dir).glob(u):  # TODO: make recursive?
-                            if p.is_file():
-                                p.unlink()
-                            elif p.is_dir():
-                                rmtree(p)
-                    cfg.pop(u)
-                    logger.info(f"Deleted {u}")
-
-
-def _merge(dst, src):
-    if isinstance(dst, dict) and isinstance(src, dict):
-        for k in src:
-            if k not in dst:
-                dst[k] = src[k]
-            else:
-                _merge(dst[k], src[k])
-
-
-def _expand(config, templates):
-    if isinstance(config, dict):
-        refs = config.pop(rc["configs"]["header_ref"], [])
-        if isinstance(refs, str):
-            refs = [refs]
-        for k in config:
-            _expand(config[k], templates)
-        for r in reversed(refs):
-            _merge(config, templates[r])
-    elif isinstance(config, list):
-        for v in config:
-            _expand(v, templates)
-
-
-def load_config(uid, group=None, expand=True):
-    if uid in {rc["configs"]["header_tag"], rc["configs"]["header_ref"]}:
-        raise KeyError(f"Key {uid} is reserved")
-    for path in glob_groups(group):
-        cfgs = yamlsf.load(path)
-        if cfgs and (cfg := cfgs.get(uid)):
-            while path in _config_path_history:
-                _config_path_history.remove(path)
-            _config_path_history.appendleft(path)
-            break
-    else:
-        raise KeyError(f"Simulation {uid} config not found")
-
-    if expand:  # expand config via templates
-        _expand(cfg, cfgs.get(rc["configs"]["header_tag"], {}))
-
-    return path, cfg
-
-
-@contextmanager
-def lock_config(path):
-    with open(path, "r+") as f:
-        fcntl.lockf(f, fcntl.LOCK_EX)
-        logger.debug("Locked config %s", path)
-        yield f
-        fcntl.lockf(f, fcntl.LOCK_UN)  # probably superflous
-
-
-@contextmanager
-def update_config(f):
-    cfgs = yamlrt.load(f)
-    yield cfgs
-    f.seek(0)
-    yamlrt.dump(cfgs, f)
-    f.truncate()
-
-
-def update_config_uid(path, old_uid, new_uid, template=None):
-    path = Path(path)
-    if template is None:
-        template = rc["configs"].getboolean("template")
-    ref_uid = new_uid.rstrip("~R")
-    map_uid = {old_uid: ref_uid} if template and ref_uid != old_uid else None
-    with lock_config(path) as f:
-        # >1e3 times faster on O(1e3) lines
-        if rc["configs"].getboolean("unsafe_update"):
-            old_key = re.compile(rf"^{old_uid}(?=:[^\w])")
-            # tempfile.SpooledTemporaryFile for large configs? no point
-            # because must still fit in memory when loaded as yaml
-            cfg = f.readlines()
-            for i, l in enumerate(cfg):
-                # update uid
-                l = old_key.sub(new_uid, l, 1)
-                # template refs
-                if map_uid:
-                    l = Template(l).safe_substitute(map_uid)
-                cfg[i] = l
-            # copy only once update has been successfully completed
-            # (no shutil.copyfile as it voids the lock on f)
-            f.seek(0)
-            f.writelines(cfg)
-            f.truncate()
-        else:
-            with update_config(f) as cfg:
-                # update uid
-                cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
-                # template refs
-                if map_uid:
-                    for p, leaf in dpath.search(cfg, "**", yielded=True):
-                        if isinstance(leaf, str) and old_uid in leaf:
-                            dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
+    return fun_sim_or_uid
 
 
 class Simulation(Cache):
-
     def __init__(self, uid=None, cfg=None, readonly=True):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
         if uid and readonly:
             self.uid = uid.rsplit("~", 1)[0]
         else:
-            self.uid = _valid_uuid(uid)
+            self.uid = valid_uuid(uid)
         cfg = cfg or {}
         self.cfg_path = None
         self._save_time = None
@@ -452,7 +143,7 @@ class Simulation(Cache):
         # setup logging
         if not readonly:
             self.setup_logging()
-            logger.info(f"Running %s", shlex.join(sys.argv))
+            logger.info("Running %s", shlex.join(sys.argv))
 
         # handle readonly uninitiazlized simulation
         try:
@@ -478,7 +169,7 @@ class Simulation(Cache):
 
             # update params
             diff = dictdiffer.diff(par, cfg, expand=True)
-            diff = [d for d in diff if not "remove" in d]
+            diff = [d for d in diff if "remove" not in d]
             if diff:
                 dictdiffer.patch(diff, par, in_place=True)
                 msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
@@ -487,15 +178,15 @@ class Simulation(Cache):
     @classmethod
     def from_config(cls, uid, group=None, template=None):
         # before writing/linking anything get config
-        cfg_path, cfg = load_config(uid, group)
+        cfg_path, cfg = cfg_load(uid, group)
         sim = cls(uid, cfg, readonly=False)
         sim.cfg_path = cfg_path
-        update_config_uid(cfg_path, uid, f"{sim.uid}~R", template)
+        cfg_update_uid(cfg_path, uid, f"{sim.uid}~R", template)
         return sim
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            update_config_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
+            cfg_update_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
 
     def __repr__(self):
         args = f"{self.uid!r}, readonly={self.readonly!r}"
@@ -509,7 +200,7 @@ class Simulation(Cache):
 
     def __copy__(self):
         new = super().__copy__()
-        new.uid = _valid_uuid()
+        new.uid = valid_uuid()
         new.cache = {}
         return new
 
