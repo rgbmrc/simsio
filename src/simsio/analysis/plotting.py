@@ -152,7 +152,7 @@ def report_1d(
     br_arrays = _prepare_arrays(len(dims), [ug, x_obs, y_obs])  # TODO x/y order, cbar
     ug = br_arrays[0]
     # y labels opposite the row titles, which grid_titles puts on the left
-    y_side = y_side or ("right" if row_titles not in {None, ...} else "left")
+    y_side = y_side or ("right" if _titled(row_titles) else "left")
 
     # figure & axes
     shape = ug.shape[:2]
@@ -554,6 +554,13 @@ def sanitize_fig_name(fig):
     fig.set_label(sanitize_path(fig.get_label()))
 
 
+def _titled(title):
+    """Whether `grid_titles` will draw anything for `title`. `...` reaches it only
+    from the non-xarray path of `_prepare_uids_grid`, which has no coords to name
+    the rows/columns with -- elsewhere `transpose_grid` has already resolved it."""
+    return title not in {None, ...}
+
+
 def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
     vertical = pos in {"left", "right"}
     ug = np.atleast_2d(ug)
@@ -570,7 +577,7 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
         if obs.shape[0] > 1 and obs.shape[1] == 1:
             obs_titles = [o.string() for o in obs[:, 0]]
     ug_titles = []
-    if title not in {None, ...}:
+    if _titled(title):
         title = np.atleast_1d(Function.get_array(title))
         ug = np.ma.masked_equal(ug, "")
         # TODO mixed Function/Measure?
