@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 # TODO move to mplotter/config
 TILE_SIZE = 1.33
 AXES_PAD = 0.1
-# (horizontal, vertical) pad between tiles that carry their own tick labels
-# (see _label_unshared); asymmetric because tick labels are wider than tall
-TICKLABELS_PAD = (0.4, 0.3)
 CBAR_SIZE = 0.1
 MAX_DIGITIZED = 12
 
@@ -141,7 +138,7 @@ def report_1d(
     fig=None,
     **grid_kwds,
 ):
-    _prepare_grid_kwds(grid_kwds)
+    defaults = _prepare_grid_kwds(grid_kwds)
     # axg.Grid does not supprt cbar-related args
     # we nonetheless keep them in grid_kwds in analogy with report_2d
     # TODO same for other args?
@@ -189,6 +186,9 @@ def report_1d(
             ax.axis("off")
     grid_titles(grid.axes_row[0], "top", ug, col_titles)
     grid_titles(grid.axes_column[0], "left", ug, row_titles)
+    # an explicit axes_pad is left alone
+    if "axes_pad" in defaults and _needs_pad_fit(grid, grid_kwds):
+        _fit_axes_pad(fig, grid, grid_kwds, tile_size)
     return fig, grid
 
 
@@ -279,18 +279,14 @@ def _shared_axes(grid_kwds):
 
 
 def _prepare_grid_kwds(grid_kwds, cbar=True):
-    share_x, share_y = _shared_axes(grid_kwds)
-    # unshared axes keep their tick labels (_label_unshared): make room for them
-    grid_kwds.setdefault(
-        "axes_pad",
-        (
-            AXES_PAD if share_y else TICKLABELS_PAD[0],
-            AXES_PAD if share_x else TICKLABELS_PAD[1],
-        ),
-    )
+    """Fill in the grid defaults, returning the keys they were needed for."""
+    given = set(grid_kwds)
+    # unshared axes need more, but that is measured afterwards (_fit_axes_pad)
+    grid_kwds.setdefault("axes_pad", AXES_PAD)
     if cbar:
         grid_kwds.setdefault("cbar_pad", AXES_PAD)
         grid_kwds.setdefault("cbar_size", CBAR_SIZE)
+    return set(grid_kwds) - given
 
 
 def _label_unshared(grid, grid_kwds):
@@ -304,6 +300,48 @@ def _label_unshared(grid, grid_kwds):
     kwds = {k: True for k, shared in labels if not shared}
     for ax in grid:
         ax.tick_params(**kwds)
+
+
+def _overhangs(ax):
+    """Room (inches) the decorations of `ax` take outside its frame, ordered as
+    (left, bottom, right, top). Cheaper than a draw: get_tightbbox() runs the
+    locators and places the labels by itself."""
+    bb = ax.get_tightbbox()
+    fr = ax.bbox
+    if bb is None:  # invisible axes
+        return np.zeros(4)
+    over = [fr.x0 - bb.x0, fr.y0 - bb.y0, bb.x1 - fr.x1, bb.y1 - fr.y1]
+    return np.clip(over, 0, None) / ax.figure.dpi
+
+
+def _needs_pad_fit(grid, grid_kwds):
+    """Whether anything can reach into the gaps between the tiles: tick labels,
+    which unshared axes carry on every tile (_label_unshared), or an offset text,
+    which any tile can carry above (y) or right of (x) its frame."""
+    if grid.get_geometry() == (1, 1):  # no gaps
+        return False
+    if not all(_shared_axes(grid_kwds)):
+        return True
+    return any(_has_offset(axis) for ax in grid for axis in (ax.xaxis, ax.yaxis))
+
+
+def _has_offset(axis):
+    fmt = axis.get_major_formatter()
+    fmt.set_locs(axis.get_majorticklocs())  # as a draw would, but for free
+    return bool(fmt.get_offset())
+
+
+def _fit_axes_pad(fig, grid, grid_kwds, tile_size):
+    """Set axes_pad to AXES_PAD plus the room the tiles need between them, and
+    rescale the figure so that they keep their nominal size. Single pass: the pad
+    is *not* fitted again if the caller later reformats the axes."""
+    over = np.array([[_overhangs(ax) for ax in row] for row in grid.axes_row])
+    # each gap must fit what the two tiles it separates reach into it
+    h_pad = AXES_PAD + (over[:, :-1, 2] + over[:, 1:, 0]).max(initial=0)
+    v_pad = AXES_PAD + (over[:-1, :, 1] + over[1:, :, 3]).max(initial=0)
+    grid_kwds["axes_pad"] = (h_pad, v_pad)
+    grid.set_axes_pad(grid_kwds["axes_pad"])
+    fig.set_size_inches(_fig_size(grid.get_geometry(), tile_size, grid_kwds))
 
 
 def _fig_size(shape, tile_size, grid_kwds):

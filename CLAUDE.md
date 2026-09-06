@@ -79,3 +79,7 @@ Therefore:
 features, and ideas raised but not built. Append to it whenever something is found
 and not fixed. It is committed on purpose — it must survive across sessions and
 across projects.
+
+It is grouped by area, not by severity: put an item in the section it belongs to and
+mark it with the same gitmoji the commit closing it would carry (🐛 / 🩹 / 🚧 / 💡,
+legend at the top of the file). Add a section rather than letting a catch-all grow.
