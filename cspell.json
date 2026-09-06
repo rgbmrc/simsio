@@ -10,6 +10,8 @@
         "cbar",
         "cmap",
         "fontsize",
+        "gitlink",
+        "gitmoji",
         "labelpad",
         "labelsize",
         "mathrm",

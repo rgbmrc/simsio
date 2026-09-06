@@ -6,12 +6,11 @@ consuming project's `.claude/skills/`); this file is about changing the library.
 
 ## Context
 
-The author is a physics postdoc, not a maintainer. simsio is improved **on demand**,
+The author is a physics postdoc, not a software maintainer. simsio is improved **on demand**,
 from inside whatever project currently needs it — this repo is normally checked out
 as a git submodule (`lib/simsio`) of that project and edited in place. Do not
-propose "proper" workflows that require a second clone, a release cycle, or a test
-suite that does not exist yet. Do propose the cheapest change that works and leaves
-the code in a better state than a pure hack.
+propose workflows that require a second clone, a release cycle, or a test
+suite that does not exist yet.
 
 The long-term goal is a polished library on PyPI. The short-term constraint is the
 author's time. When those conflict, the constraint wins — but record the debt in
@@ -23,7 +22,7 @@ Treat these differently:
 
 | module | status | rule |
 |---|---|---|
-| `settings`, `configs`, `iocore`, `serializers`, `simulations`, `runsim` | **stable core** | in daily use across projects; change conservatively, preserve behaviour, prefer additive fixes |
+| `settings`, `configs`, `iocore`, `serializers`, `simulations`, `runsim` | **stable core** | in daily use across projects; change conservatively |
 | `analysis/quantities`, `analysis/filters` | maturing | API mostly settled; refactor freely but keep `Measure`/`Function` semantics |
 | `analysis/organize` | alpha | the numpy→xarray promotion is half-done; expect rough edges |
 | `analysis/plotting`, `analysis/grids` | experimental | actively reshaped; breaking changes are fine |
@@ -32,20 +31,31 @@ Treat these differently:
 ## Conventions
 
 - Terse code. No comments for self-evident lines; a short comment justifying a
-  non-obvious approach is welcome and used liberally in this codebase.
+  non-obvious approach is welcome.
 - Existing markers are meaningful and worth grepping: `TODO`, `FIXME`, `OPT`
   (optimization opportunity), `DEL` (dead once X lands), `NOTE`, `HACK`.
 - `ruff` via pre-commit; per-file `# ruff: noqa:` headers where the style is
-  deliberate (lambdas in `quantities`, star-import reminders in `runsim`).
-- Commit subjects are gitmoji + scope: `🐛 fix config locking`,
-  `analysis/filters: logscale devs`. Keep the scope prefix — it is what makes
-  cherry-picking core fixes onto `develop` feasible later.
+  deliberate (e.g. lambdas in `quantities`).
+- Commit messages are "gitmoji + scope: description", e.g. `🐛 configs: fix
+  locking`, `✨ analysis.filters: logscale devs`.
+- Standard emojis: ✨ feature, 🐛 bug, 🚑 critical hotfix, 🩹 non-critical fix,
+  ♻️ refactor, 💥 breaking change, 🚧 WIP, 💩 bad code needing rework, 🔧 config,
+  ⬆️/⬇️ deps, ✏️ typo, 🎨 format/structure, ⚡️ performance, 🚨 linter, 📝 docs,
+  💬 text/literals, 💡 comments/ideas, 🦺 validation, 🙂 UX,
+  🍻 hacky code, 🤖 agents files (CLAUDE.md, skills).
+- Classify more severely in the stable core (wrong results or data loss are
+  🚑, a crash on a supported path is 🐛), less so for analysis and plotting
+  (mostly patches 🩹 of experimental code).
 
 ## Branches
 
-`develop` is the reliable core. Work happens on a feature branch of the moment
-(currently `xarray-patches`) which runs well ahead of it. Commits touching the
-stable core should be scoped as such so they can be replayed onto `develop`.
+`develop` is the base branch. A one-commit bugfix or patch can go straight onto
+it. Anything else starts a new feature branch (small changes can always be
+fast-forwarded into `develop` if needed).
+
+`main` is an occasional integration snapshot, behind `develop`: it holds a
+stable version of simsio's core library and a preliminary, pre-xarray draft of
+the analysis subpackage.
 
 ## Working in-place from a parent project
 
@@ -53,8 +63,10 @@ The submodule is edited directly and its commits are the only copy of the work.
 Therefore:
 
 - **Commit inside the submodule before ending any session that changed it**, even
-  as WIP, and bump the gitlink in the parent repo. An unpushed, uncommitted change
-  here is one `git submodule update` away from being lost.
+  as WIP: an uncommitted change here is one `git submodule update` away from being
+  lost. Bumping the gitlink in the parent repo is a separate, optional step — the
+  parent's history does not need to track every simsio commit, so do it when it is
+  convenient rather than by reflex.
 - Never run `git submodule update` in the parent without checking
   `git -C lib/simsio status` first.
 - Test against the parent project's real data — that is the point of this setup.
