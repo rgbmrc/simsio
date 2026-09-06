@@ -73,19 +73,28 @@ usually carry the same marker.
 ## analysis: plotting
 
 - 🐛 `report_1d(..., y_titles=None)` raises `x and y must have same first dimension`
-  from `plot_1d_data`: dropping the row dimension leaves `_prepare_arrays`
-  broadcasting `x_obs` against a grid axis that `y_obs` does not have. Happens with
-  both a scalar and an array `x_obs`, and predates the layout work
-  (`analysis/verify_model.py` calls it that way).
+  from `plot_1d_data` when `x_obs` is *stacked*, as `filters.dev_obs` returns it:
+  dropping the row dimension leaves `_prepare_arrays` broadcasting `x_obs` against a
+  grid axis that `y_obs` does not have. A plain `x_obs` is fine, and the dim
+  resolution (`transpose_grid`) is not the culprit — it resolves the same slots with
+  or without the crash. `analysis/verify_model.py:194` calls it that way.
 - 🩹 the figure size ignores whatever the grid draws *outside* its tiles — row and
   column titles, the edge axis labels, the colorbar — so those clip in a plain
   `savefig` (inline backends and `bbox_inches="tight"` hide the problem).
-  `_fit_axes_pad` only compensates the width it adds to the colorbar pad. Related:
-  `TILE_SIZE` is not the size a tile gets, since the `SubplotDivider` lays the grid
-  out inside the fractional subplot margins. Both go away by measuring the outer
-  overhangs (as `grid_titles` already does per side), sizing the figure as
-  `margins + tiles + pads (+ cbar)` and pinning the divider rect to those margins in
-  figure fractions.
+  `AxesGrid.fit_axes_pad` only reports the width it adds to the colorbar pad, which
+  `_report_titles` gives back to the figure. Related: `TILE_SIZE` is not the size a
+  tile gets, since the `SubplotDivider` lays the grid out inside the fractional
+  subplot margins. Both go away by measuring the outer overhangs (as `grid_titles`
+  already does per side), sizing the figure as `margins + tiles + pads (+ cbar)` and
+  pinning the divider rect to those margins in figure fractions.
+- 🩹 `annotate_image_axis` labels *every* coordinate value, so a `report_2d` grid of
+  narrow tiles overlaps its own x tick labels (`$1e-08$$1e-07$...`). It should thin
+  them out, or leave a real Locator/Formatter in place of the FixedLocator.
+- 🩹 `AxesGrid._init_locators` is ported from mpl 3.10's `ImageGrid._init_locators`
+  and reads its private `_colorbar_*` state, so a matplotlib upgrade can break it.
+  Two deliberate divergences: tiles are `Size.Scaled(1)` unless `aspect` is on, and a
+  relative `cbar_size` ("5%") in `cbar_mode="single"` refers to the grid extent along
+  the bar rather than across it, as mpl has it.
 - 💡 grid titles are bare `ax.text` placed by `add_axis_label`, past the decorations
   measured on that side. That is deliberate — it is uniform across the four sides,
   and it keeps the titles of a row/column whose tile was switched off
@@ -95,34 +104,29 @@ usually carry the same marker.
   titles the `ylabel` of the last column (`label_position="right"`) or a
   label-only `secondary_yaxis`. Note both then need a *free* side, which the
   colorbar of `report_1d`/`report_2d` may well be occupying.
-- 🩹 `report_2d` places its grid titles before plotting the images, so the
-  `_decorations_pad` measurement finds bare axes and the titles end up on top of the
-  tick labels `annotate_image_axis` adds later. Moving the two `grid_titles` calls
-  after the plotting loop fixes it, but they read `obs` *before* `autoscale_norms`
-  broadcasts it, which changes which obs titles they emit — needs a `report_2d` case
-  to test against (none in `umps-tests`).
 - 🚧 the `report_nd` refactor was left half-done (commit `3446645`, "bad partial
-  refactor"); the ugrid/xarray axis transposition in `transpose_grid` is the
-  fragile part.
+  refactor"). Its idea — the report args transpose the ugrid onto the report slots —
+  is kept and now resolves named dims before positional ones; `report_1d` and
+  `report_2d` share the whole skeleton, so what is left is to fold them into one
+  entry point taking the slot list (`REPORT_1D_DIMS` / `REPORT_2D_DIMS`) and the
+  inner loop. Note `x_obs`/`y_obs` are still *not* slots in `report_2d`: we do not
+  know what `obs` does with the dims past the grid.
 - 🚧 `report_1d` accepts a `cycler` grid dimension but it is not implemented
   (`# DEL cycler=None hack while cycler not implemented`).
 - 🚧 `grid_from_obs` is a sketch raising `NotImplementedError`; would give
   `report_2d` real (non-index) image extents. Note `imshow` cannot handle
   non-linear coords — needs `pcolormesh` for the general case.
-- 💡 **layout backend**: `axg.Grid` gives fixed-size tiles but pads them blindly, so
-  whatever reaches into the gaps has to be measured by hand (`_fit_axes_pad`: a
-  `get_tightbbox` pass, single, so stale if the caller reformats the axes
-  afterwards). The alternative is
-  `fig.subplots(layout="constrained")`, which pads from the real drawn extents and
-  also places the colorbar, letting `report_1d` drop its manual
-  `div.append_size`/`new_locator` block. Costs: tiles are no longer a fixed size
-  across figures, and `report_2d` should *not* move — constrained layout handles the
-  fixed-aspect `imshow` tiles of `ImageGrid` badly (`layout="compressed"` only
-  mitigates it). The version worth doing is not a swap but a thin axes container
-  exposing `axes_row`/`axes_column`/`__iter__`/`cax`, with the backend selected by a
-  `layout=` kwarg (`"fixed"` → `Grid`/`ImageGrid`, `"constrained"` → `subplots`).
-  `grid_titles`, `axes_1d` and `plot_2d_data` already need nothing else, and it is
-  the same abstraction `report_nd` wants.
+- 💡 **layout backend**: `AxesGrid` gives fixed-size tiles but pads them blindly, so
+  whatever reaches into the gaps is measured by hand (`fit_axes_pad`: one
+  `get_tightbbox` pass, so it goes stale if the caller reformats the axes
+  afterwards). The alternative is `fig.subplots(layout="constrained")`, which pads
+  from the real drawn extents and also places the colorbar. Costs: tiles are no
+  longer a fixed size across figures, and `report_2d` should *not* move —
+  constrained layout handles fixed-aspect `imshow` tiles badly (`layout="compressed"`
+  only mitigates it). Now that `AxesGrid` *is* the axes container the reports talk
+  to, this reduces to a second implementation of its surface
+  (`axes_row`/`axes_column`/`__iter__`/`cbar_axes`/`ax.cax`/`set_label_mode`/
+  `needs_pad_fit`/`fit_axes_pad`), chosen by a `layout=` kwarg.
 - 💡 use the `DataArray` name in plotting to set the figure path.
 
 ## packaging, docs & release

@@ -25,7 +25,7 @@ Treat these differently:
 | `settings`, `configs`, `iocore`, `serializers`, `simulations`, `runsim` | **stable core** | in daily use across projects; change conservatively |
 | `analysis/quantities`, `analysis/filters` | maturing | API mostly settled; refactor freely but keep `Measure`/`Function` semantics |
 | `analysis/organize` | alpha | the numpy→xarray promotion is half-done; expect rough edges |
-| `analysis/plotting`, `analysis/grids` | experimental | actively reshaped; breaking changes are fine |
+| `analysis/plotting`, `analysis/axes_grid`, `analysis/grids` | experimental | actively reshaped; breaking changes are fine |
 | `extensions/*` | per-backend glue | only `ext_tenpy` is currently exercised |
 
 ## Conventions
