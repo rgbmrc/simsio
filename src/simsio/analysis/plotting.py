@@ -154,23 +154,22 @@ def report_1d(
     fig=None,
     **grid_kwds,
 ):
-    defaults = _prepare_grid_kwds(
-        grid_kwds, cbar_mode="single" if cbar_obs is not None else None
-    )
     # DEL cycler=None hack while cycler not implemented
     dims = dict(zip(REPORT_1D_DIMS, [y_titles, x_titles, None, cbar_obs]))
-    label_obs = [y_obs, x_obs, cbar_obs]
-    fig, grid, br_arrays, titles, sides = _report_grid(
-        ug,
-        dims,
-        [x_obs, y_obs],  # TODO x/y order, cbar
-        label_obs,
+    # TODO x/y order, cbar
+    xg, br_arrays, titles = _report_dims(ug, dims, [x_obs, y_obs])
+    ug, cbar_obs = br_arrays[0], titles[3]  # cbar_obs may have been a grid dim (...)
+    defaults = _prepare_grid_kwds(grid_kwds, cbar_mode="single" if cbar_obs else None)
+    fig, grid, sides = _report_grid(
+        xg,
+        ug.shape[:2],
+        titles,
+        [y_obs, x_obs, cbar_obs],
         tile_size,
         fig,
         grid_kwds,
         label_sides,
     )
-    ug, cbar_obs = br_arrays[0], titles[3]
     # one cbar_obs per colorbar, each scaled over the tiles its bar serves
     cbar_obs = cbar_obs and _cbar_obs_grid(cbar_obs, ug, grid_kwds)
 
@@ -316,11 +315,16 @@ def _decorations_pad(axs, pos):
     return 72 * over  # ScaledTranslation and labelpad work in points
 
 
-def _report_grid(ug, dims, arrays, label_obs, tile_size, fig, grid_kwds, label_sides):
-    """The grid dimensions, then the figure and the axes to plot them in."""
+def _report_dims(ug, dims, arrays):
+    """Give the report slots their grid dimensions, then broadcast onto them: the uid
+    grid first, then `arrays`. Comes before the figure, whose name needs the obs the
+    slots resolved to."""
     xg, ug, titles = _prepare_uids_grid(ug, dims)
-    arrays = _prepare_arrays(len(dims), [ug, *arrays])
-    shape = arrays[0].shape[:2]
+    return xg, _prepare_arrays(len(dims), [ug, *arrays]), titles
+
+
+def _report_grid(xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_sides):
+    """The figure and the axes to plot the grid in, sided and labelled."""
     titled = [_titled(titles[1]), _titled(titles[0])]  # x from the columns, y the rows
     sides = _sides(grid_kwds, titled, label_sides)
     fig = plt.figure(
@@ -328,7 +332,7 @@ def _report_grid(ug, dims, arrays, label_obs, tile_size, fig, grid_kwds, label_s
         _fig_size(shape, tile_size, grid_kwds["axes_pad"]),
     )
     grid = AxesGrid(fig, 111, shape, label_sides=sides[1], **grid_kwds)
-    return fig, grid, arrays, titles, sides
+    return fig, grid, sides
 
 
 def _report_titles(fig, grid, ug, titles, sides, tile_size, fit, obs=None, has_cbar=()):
@@ -398,10 +402,11 @@ def report_2d(
 
     # OPT y_obs, x_obs from xg? dunno what obs does with dims >= 2
     dims = dict(zip(REPORT_2D_DIMS, [y_titles, x_titles]))
-    fig, grid, br_arrays, titles, sides = _report_grid(
-        ug, dims, [obs], [obs], tile_size, fig, grid_kwds, label_sides
-    )
+    xg, br_arrays, titles = _report_dims(ug, dims, [obs])
     br_ug = br_arrays[0]  # OPT do we really need the broadcasted ug here?
+    fig, grid, sides = _report_grid(
+        xg, br_ug.shape[:2], titles, [obs], tile_size, fig, grid_kwds, label_sides
+    )
 
     # normalization
     # TODO handle norm given in im_kwds
