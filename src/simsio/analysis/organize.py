@@ -151,45 +151,55 @@ def nest_grids(
 
 
 def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable]):
-    """Best usage is either all or no None dims.
+    """Give each slot of `dims` a grid dimension and transpose the grid onto them.
 
-    Mixed case might give unexpected results.
+    A slot asks for a dimension by name (a Function, Measure or string), for the next
+    unclaimed one (`...`), or for none at all (None or False, a size-1 dummy). Unclaimed
+    dimensions trail the slots. Returns the transposed grid and one quantity per slot,
+    to title it with.
 
     """
     # TODO FunctionLike in type hints?
     try:
-        dims_items = iter(dims.items())
+        slots = list(dims.items())
     except AttributeError:
-        dims_items = ((f"dim_{i}", dim) for i, dim in enumerate(dims))
-    old_grid = list(grid.dims)
-    new_grid = []
-    new_dims = {}
-    while old_grid:
-        k, o = next(dims_items, (None, ...))
+        slots = [(f"dim_{i}", o) for i, o in enumerate(dims)]
+    free = list(grid.dims)
+    axes, titles = {}, {}
+
+    def claim(k, dim):
+        free.remove(dim)
+        axes[k] = dim
+
+    for k, o in slots:  # skipped: the dim nest_grids made for the slot, or a dummy
         if not o:  # None or False
-            try:
-                old_grid.remove(k)
-            except ValueError:
-                grid = grid.expand_dims(k)
-            new_grid.append(k)
-            new_dims[k] = o
+            titles[k] = None
+            if k in free:
+                claim(k, k)
+            else:
+                axes[k] = k  # expanded below
+    for k, o in slots:  # named, before a positional claim can steal what they ask for
+        if k in axes or o is ...:
             continue
-        if o is ...:
-            o = old_grid.pop(0)
-            new_grid.append(o)
-            # HACK if to avoid casting to Function "row" etc
-            new_dims[k] = o if o in grid.coords else None
-            continue
+        titles[k] = o
         try:
             # DEL .name if Function coords is implemented
-            o = Function.get(o).name
-            old_grid.remove(o)
-            new_grid.append(o)
-            new_dims[k] = o
-        except (TypeError, ValueError):
-            # we need this, e.g. for report_2d with a single-sim x_obs
-            new_grid.append(old_grid.pop(0))
-            new_dims[k] = o
-    new_dims.pop(None, None)
-    # return grid.transpose(*new_grid)
-    return grid.transpose(*new_grid), [*map(Function.get, new_dims.values())]
+            dim = Function.get(o).name
+        except TypeError:  # not a dimension: filled below, keeping the title
+            continue
+        if dim in free:
+            claim(k, dim)
+    for k, _ in slots:  # the rest, in grid order, then dummies once they run out
+        if k in axes:
+            continue
+        if free:
+            axes[k] = dim = free.pop(0)
+            # HACK if to avoid casting to Function "row" etc
+            titles.setdefault(k, dim if dim in grid.coords else None)
+        else:
+            axes[k] = k
+            titles.setdefault(k, None)
+
+    order = [axes[k] for k, _ in slots]
+    grid = grid.expand_dims([dim for dim in order if dim not in grid.dims])
+    return grid.transpose(*order, ...), [Function.get(titles[k]) for k, _ in slots]
