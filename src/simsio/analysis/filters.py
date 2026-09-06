@@ -25,6 +25,7 @@ __all__ = [  # noqa: RUF022
     # linalg
     "norm_",
     # abs & rel deviation
+    "dev_obs",
     "adev",
     "rdev",
     "adev_log",
@@ -99,7 +100,7 @@ def adev(x):
     return y - ref
 
 
-adev_log = Measure(adev, scale="log")
+adev_log = Measure(adev @ abs_, scale="log")
 
 
 @Function.register(label=r"{x}$\text{{ rel. dev.}}$".format, **dev_attrs)
@@ -108,7 +109,15 @@ def rdev(x):
     return y / np.abs(ref) - np.sign(ref)
 
 
-rdev_log = Measure(rdev, scale="log")
+rdev_log = Measure(rdev @ abs_, scale="log")
+
+
+def dev_obs(x, y, dev=adev, first=False):
+    # TODO support y/dev array (broadcast)
+    x, y = +x, +y
+    if first:
+        x, y = x[::-1], y[::-1]
+    return x[:-1], y @ dev
 
 
 @Function.register(label=r"$\mathcal{F}$")
