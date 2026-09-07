@@ -582,6 +582,17 @@ def _titled(title):
     return title not in {None, ...}
 
 
+def _title_props():
+    """The text properties a title is drawn with, as `Axes.set_title` reads them."""
+    props = {
+        "fontsize": rcParams["axes.titlesize"],
+        "fontweight": rcParams["axes.titleweight"],
+    }
+    if str(rcParams["axes.titlecolor"]).lower() != "auto":
+        props["color"] = rcParams["axes.titlecolor"]
+    return props
+
+
 def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None, past_cbar=True):
     vertical = pos in {"left", "right"}
     ug = np.atleast_2d(ug)
@@ -615,9 +626,9 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None, past_cba
         else:
             ug_titles = obs_titles
     # one pad for the whole row/column, so that the titles line up
-    pad = rcParams["axes.labelpad"] + _decorations_pad(axs, pos, past_cbar)
+    pad = rcParams["axes.titlepad"] + _decorations_pad(axs, pos, past_cbar)
     for ax, t in zip(axs, ug_titles):
-        label = add_axis_label(ax, t, pos, labelpad=pad)
+        label = add_axis_label(ax, t, pos, labelpad=pad, **_title_props())
         setattr(ax, ("y" if vertical else "x") + "_title", label)
 
 
@@ -683,7 +694,7 @@ def add_axis_label(ax, label, loc, fontdict=None, labelpad=None, **kwargs):
     text_kwargs.update(kwargs)
 
     if "fontsize" not in text_kwargs and "size" not in text_kwargs:
-        text_kwargs["fontsize"] = rcParams["axes.labelsize"]  # TODO titlesize
+        text_kwargs["fontsize"] = rcParams["axes.labelsize"]
 
     trans = ax.transAxes + transforms.ScaledTranslation(dx, dy, fig.dpi_scale_trans)
     text = ax.text(x, y, label, transform=trans, **text_kwargs)
