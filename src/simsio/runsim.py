@@ -84,7 +84,6 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     parser.add_argument("group", type=str, help="group match pattern")
     parser.add_argument("uid", type=str, help="unique identifier of the simulation")
     parser.add_argument("ncores", type=int, help="number of CPU cores to use")
-    parser.add_argument("--save-extras", action="store_true", help="save extras")
     args = parser.parse_args(args=sys.argv[1:delim])
     set_num_threads(args.ncores)
     if isinstance(sim_class, str):
@@ -103,12 +102,6 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     try:
         yield sim
         sim.dump()
-        # TODO: delgate to scripts for specific extras
-        # TODO: this does not work for handles previously removed from cache
-        if not args.save_extras:
-            for key in sim:
-                if key not in rc["IO-handlers"]:
-                    sim.unlink(key)
     except:
         logger.exception("Uncaught exception while running simulation")
         raise
