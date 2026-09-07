@@ -14,7 +14,11 @@ import ruamel.yaml as yaml
 
 from simsio.settings import rc
 
-# from simsio.analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
+# TODO by sort_configs but leads to circular imports
+# from simsio.analysis.collect import uids_sort
+
+# TODO ensure configs are inside the rc config directory?
+# https://stackoverflow.com/questions/3812849/how-to-check-whether-a-directory-is-a-sub-directory-of-another-directory
 
 __all__ = [
     "SimsQuery",

@@ -52,9 +52,10 @@ usually carry the same marker.
 - 💡 `runtime_info(ext_cpu_time=...)` is an ugly hook for `ext_qtea`; find a cleaner
   accounting mechanism.
 - 💡 deprecate the `path=` override in `Simulation.link`: it is the only remaining
-  way to place a storage outside the rc layout, it cannot be registered, and
-  dropping it would close the "assert path stays under an rc directory" TODO
-  outright.
+  way to place a storage outside the rc layout (a template-resolved path cannot
+  escape, the key being a single component, and `_register` rejects `path=` — so the
+  hole is readonly-only and writes nothing). Dropping it retires the last of the
+  "assert path stays under an rc directory" TODO.
 - 💡 `cfg_pop` should purge an asset's storages via the registry once it is fixed;
   the project-side `sims.sh` helpers likewise only scan `results/`, so `data/`
   assets leak from `purge`/`quota`.

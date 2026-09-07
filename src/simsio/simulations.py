@@ -356,8 +356,8 @@ class Simulation(Cache):
                 (s.strip() for s in h.split(",")),
             ),
         )
-        # TODO: assert an explicit path= stays under an rc directory (deprecate it?);
-        # a template-resolved path cannot escape, the key being a single component
+        # template-resolved paths cannot escape the rc directory (key is a single component)
+        # explicit path= could, but only reached in readonly mode (_register rejects it)
         out = super().link(key, touch=touch, **(rc_link_kw | link_kw))
         if register:
             self._register(key, {"via": via} | link_kw)
