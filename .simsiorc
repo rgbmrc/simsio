@@ -2,7 +2,7 @@
 # $key templates declare asset families, resolved on demand by Simulation.link
 assets = out/$uid, w, simsio.serializers.JSONSerializer
 aux = out/$uid/$key, w, simsio.serializers.NPZSerializer
-dat = data/$uid/$key, w, simsio.extensions.ext_hickle.HickleSerializer
+dat = data/$uid/$key, w, simsio.serializers.PickleSerializer
 log = out/$uid,  , simsio.serializers.LogSerializer
 par = out/$uid, w, simsio.serializers.YAMLSerializer
 res = out/$uid, w, simsio.serializers.NPZSerializer
