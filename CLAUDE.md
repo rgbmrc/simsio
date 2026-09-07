@@ -25,7 +25,7 @@ Treat these differently:
 | `settings`, `configs`, `iocore`, `serializers`, `simulations`, `runsim` | **stable core** | in daily use across projects; change conservatively |
 | `analysis/quantities`, `analysis/filters` | maturing | API mostly settled; refactor freely but keep `Measure`/`Function` semantics |
 | `analysis/organize` | alpha | the numpy→xarray promotion is half-done; expect rough edges |
-| `analysis/plotting`, `analysis/grids` | experimental | actively reshaped; breaking changes are fine |
+| `analysis/plotting`, `analysis/axes_grid`, `analysis/grids` | experimental | actively reshaped; breaking changes are fine |
 | `extensions/*` | per-backend glue | only `ext_tenpy` is currently exercised |
 
 ## Conventions
@@ -79,3 +79,7 @@ Therefore:
 features, and ideas raised but not built. Append to it whenever something is found
 and not fixed. It is committed on purpose — it must survive across sessions and
 across projects.
+
+It is grouped by area, not by severity: put an item in the section it belongs to and
+mark it with the same gitmoji the commit closing it would carry (🐛 / 🩹 / 🚧 / 💡,
+legend at the top of the file). Add a section rather than letting a catch-all grow.

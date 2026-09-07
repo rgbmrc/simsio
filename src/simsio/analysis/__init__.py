@@ -1,3 +1,4 @@
+from simsio.analysis.axes_grid import *
 from simsio.analysis.grids import *
 from simsio.analysis.numpy_extras import *
 from simsio.analysis.organize import *
