@@ -30,23 +30,31 @@ def parse_sides(sides, default=("bottom", "left")):
     return tuple(out)
 
 
-def overhangs(ax, *others):
+def overhangs(ax, *others, whole=False):
     """Room (inches) the decorations of `ax`, and of anything in `others` drawn beside
-    it, take outside its frame, ordered as SIDES. Cheaper than a draw: get_tightbbox()
-    runs the locators and places the labels by itself."""
-    bbs = [bb for bb in (a.get_tightbbox() for a in (ax, *others)) if bb is not None]
-    if not bbs:  # invisible axes
+    it, take outside its frame -- outside the frames of all of them if `whole`, which
+    is what the lot needs around itself rather than what it adds to `ax`. Ordered as
+    SIDES. Cheaper than a draw: get_tightbbox() runs the locators and places the labels
+    by itself."""
+    boxes = [
+        (a.bbox, bb) for a in (ax, *others) if (bb := a.get_tightbbox()) is not None
+    ]
+    if not boxes:  # invisible axes
         return np.zeros(4)
-    bb, fr = Bbox.union(bbs), ax.bbox
+    frames, bbs = zip(*boxes)
+    bb, fr = Bbox.union(bbs), Bbox.union(frames) if whole else ax.bbox
     over = [fr.x0 - bb.x0, fr.y0 - bb.y0, bb.x1 - fr.x1, bb.y1 - fr.y1]
     return np.clip(over, 0, None) / ax.figure.dpi
 
 
-def tile_overhangs(ax):
+def tile_overhangs(ax, whole=False):
     """`overhangs(ax)` including the colorbar the grid gave `ax` alone, if it has one:
-    the two are laid out as a unit, so whatever the bar draws sits outside the tile."""
+    the two are laid out as a unit, so whatever the bar draws sits outside the tile.
+    `whole` measures from the unit's outer frame instead -- the bar has a slot of its
+    own, so only what it draws past it reaches into the gap around the unit."""
     cax = getattr(ax, "cax", None)
-    return overhangs(ax, cax) if getattr(cax, "tile", None) is ax else overhangs(ax)
+    bars = [cax] if getattr(cax, "tile", None) is ax else []
+    return overhangs(ax, *bars, whole=whole)
 
 
 def has_offset(axis):
@@ -127,6 +135,28 @@ class AxesGrid(axg.ImageGrid):
                 if cbar_mode == "each":
                     ax.cax.tile = ax  # laid out as one unit, see tile_overhangs
         self.set_label_mode(label_mode, label_sides)
+
+    @property
+    def cbar_mode(self):
+        """How the colorbars are laid out: "each", "single", "edge" or None."""
+        return self._colorbar_mode
+
+    @property
+    def cbar_location(self):
+        """The side of the tiles, or of the grid, the colorbars sit on."""
+        return self._colorbar_location
+
+    def _cbar_facing(self):
+        """The tiles a colorbar sits beside: every one when each has its own, else the
+        edge row or column."""
+        if self._colorbar_mode == "each":
+            return self.axes_all
+        return {
+            "left": self.axes_column[0],
+            "right": self.axes_column[-1],
+            "top": self.axes_row[0],
+            "bottom": self.axes_row[-1],
+        }[self._colorbar_location]
 
     def _cbar_index(self, i):
         """Which colorbar serves tile `i`: its own, its row's or column's, or the one."""
@@ -270,32 +300,40 @@ class AxesGrid(axg.ImageGrid):
             return True
         return any(has_offset(a) for ax in self for a in (ax.xaxis, ax.yaxis))
 
-    def fit_axes_pad(self, pad):
-        """Set the gaps to `pad` plus the room the tiles need between them, and the
-        colorbar pad to `pad` plus what the tiles facing it draw towards it. Returns
-        the inches the latter gained, as (horizontal, vertical), for the figure to
-        absorb. Single pass: nothing is fitted again if the caller reformats the axes.
-        """
-        # gaps separate whole tiles, colorbars included; the colorbar pad separates a
-        # tile from its own bar, so only the tile's own decorations count there
-        over = np.array([[overhangs(ax) for ax in row] for row in self.axes_row])
-        gaps = np.array([[tile_overhangs(ax) for ax in row] for row in self.axes_row])
-        loc, all_ = self._colorbar_location, slice(None)
-        side = SIDES.index(loc)
-        # each gap must fit what the two tiles it separates reach into it
-        h_pad = pad + (gaps[:, :-1, 2] + gaps[:, 1:, 0]).max(initial=0)
-        v_pad = pad + (gaps[:-1, :, 1] + gaps[1:, :, 3]).max(initial=0)
+    def fit_cbar_pad(self):
+        """Set the pad between a tile and its colorbar to the grid's, plus what the
+        tiles facing the bars draw towards them, and return the inches it gained. The
+        pad is set, not accumulated, so call it again after drawing anything else
+        between a tile and its bar to make room for that too. A zero `cbar_pad` is
+        meant literally and turns the fit off."""
+        if not self._colorbar_pad:
+            return 0.0
+        side = SIDES.index(self._colorbar_location)
+        room = self._colorbar_pad + max(
+            (overhangs(ax)[side] for ax in self._cbar_facing()), default=0
+        )
+        grown = room - self._cbar_pad_size.fixed_size
+        self._cbar_pad_size.fixed_size = room
+        return grown
+
+    def fit_axes_pad(self, pad=None):
+        """Set the gaps to `pad` (a scalar or (horizontal, vertical), the grid's own by
+        default) plus the room the tiles need between them, colorbars included, and fit
+        the colorbar pad. A zero pad is meant literally and turns the fit off, per
+        direction. Returns the inches the colorbar pad gained, as (horizontal,
+        vertical), for the figure to absorb. Single pass: nothing is fitted again if
+        the caller reformats the axes."""
+        h0, v0 = np.broadcast_to(self.get_axes_pad() if pad is None else pad, 2)
+        # a tile and its own bar face the gaps as one unit: what they draw between
+        # themselves is the colorbar pad's business, not the gap's
+        gaps = np.array(
+            [[tile_overhangs(ax, whole=True) for ax in row] for row in self.axes_row]
+        )
+        # each gap must fit what the two units it separates reach into it
+        h_pad = h0 + (gaps[:, :-1, 2] + gaps[:, 1:, 0]).max(initial=0) if h0 else 0
+        v_pad = v0 + (gaps[:-1, :, 1] + gaps[1:, :, 3]).max(initial=0) if v0 else 0
         self.set_axes_pad((h_pad, v_pad))
         grown = np.zeros(2)
-        if self._colorbar_mode:
-            edges = {
-                "left": (all_, 0),
-                "right": (all_, -1),
-                "top": (0,),
-                "bottom": (-1,),
-            }
-            # every tile faces its own bar; otherwise only the edge row or column does
-            faced = over if self._colorbar_mode == "each" else over[edges[loc]]
-            grown[side % 2] = faced[..., side].max(initial=0)  # left/right are even
-            self._cbar_pad_size.fixed_size += grown[side % 2]
+        if self._colorbar_mode:  # left/right are the even sides
+            grown[SIDES.index(self._colorbar_location) % 2] = self.fit_cbar_pad()
         return grown
