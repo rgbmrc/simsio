@@ -26,21 +26,57 @@ usually carry the same marker.
 - 🐛 `configs.cfg_sort` raises `NotImplementedError` on entry; the body references
   `uids_sort`, which cannot be imported without a circular import
   (`configs` ← `analysis.organize`).
+- 🐛 `Simulation.__copy__` shares `handles` with the original (`UserDict.__copy__`
+  only updates `__dict__`) while assigning a fresh `uid`, so the copy's storages
+  still point at the original's paths and linking on the copy mutates the original.
+  Should re-link every handle under the new uid.
+- 🐛 `JSONSerializer.dump` passes `default=lambda o: vars(o)`, which raises an opaque
+  `TypeError` on numpy scalars. Wants `o.tolist() if hasattr(o, "tolist") else vars(o)`.
+- 🩹 `IOHandler.dump` renames each storage to `.bak` before writing, so a concurrent
+  reader can see the file missing for a moment (opens as `{}`/`FileNotFoundError`).
+  Pre-existing for `par`/`res`; the assets registry inherits it.
+- 🩹 `extensions.ext_tenpy.TeNPySimulation.close` reads `self.par`, which does not
+  exist (it is `self["par"]`); the `AttributeError` is swallowed, so `warn_unused`
+  has never fired from there. Fixing the typo needs
+  `par.touch("uuid", "versioning", "monitoring")` in the same commit, or it warns
+  about simsio's own bookkeeping keys on every run.
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
   hardcoded `uuid_regex` fallback for old rc files (`DEL` marked). Shipping one
   would let that go and would fix the drift between per-project rc files
   (e.g. `umps-tests` lacks `uuid_regex`, `template`, `unsafe_update`).
-- 💡 `Simulation.link` should reject keys reserved by `[IO-handlers]` and assert the
-  resolved path stays under an rc-declared directory (both `TODO` in source).
 - 💡 `sim_to_uid`, `uid_to_sim` (like `group_to_path` and vice versa).
 - 💡 allow specifying a config path instead of a group name (especially in `run_sim`).
 - 💡 `sim_class` configurable from `.simsiorc` (`TODO` in `runsim.run_sim`).
 - 💡 `runtime_info(ext_cpu_time=...)` is an ugly hook for `ext_qtea`; find a cleaner
   accounting mechanism.
+- 💡 deprecate the `path=` override in `Simulation.link`: it is the only remaining
+  way to place a storage outside the rc layout (a template-resolved path cannot
+  escape, the key being a single component, and `_register` rejects `path=` — so the
+  hole is readonly-only and writes nothing). Dropping it retires the last of the
+  "assert path stays under an rc directory" TODO.
+- 💡 `cfg_pop` should purge an asset's storages via the registry once it is fixed;
+  the project-side `sims.sh` helpers likewise only scan `results/`, so `data/`
+  assets leak from `purge`/`quota`.
+- 💡 `_repr_html_`'s "dynamic keys" TODO is now answerable: link `self.assets` too.
+- ✅ discarded for now: recording the rc storages (`par`/`res`/`log`) in the assets
+  registry, so a simulation still reads correctly after its handler's serializer
+  changes. The upside is real — loading simulations saved with different
+  serializers, without an `rc_context` — and the asymmetry (an asset pins its
+  encoding, an rc storage does not) is not loved. Dropped on clutter: unifying
+  `__init__` needs a bootstrap exception for `assets` itself, which cannot be
+  recorded, plus three conditions on `key in rc["IO-handlers"]` — for `touch`, for
+  the missing-file warning, and because a missing `par` must raise where an absent
+  asset only warns. Mitigation meanwhile: drift fails loudly whenever the extension
+  changes, and `rc_context` accepting a partial mapping (`rc.read_dict`, ~3 lines)
+  would reduce the remedy to a one-liner.
 - ✅ `sims_or_group_arg` returns `Simulation`, not uid.
 - ✅ `Simulation == Simulation.uid`, use `is` to distinguish.
+- ✅ `Simulation.link` rejects keys reserved by `[IO-handlers]` and asserts the
+  resolved path stays under an rc-declared directory (done with the asset registry;
+  a template-resolved path can no longer escape either, the key being a single path
+  component).
 
 ## analysis: quantities & filters
 
@@ -48,6 +84,17 @@ usually carry the same marker.
   measures sharing a name collide. `Measure.__init__` papers over this by purging
   caches on redefinition; the warning about overwriting is currently suppressed
   (`quantities.py`, "output a sensible amount of warnings").
+- 🐛 `Measure.from_path`/`Function.get` resolve with `dpath.get`, which globs by
+  *enumeration* over the simulation mapping — and a `Cache` only enumerates keys
+  already loaded. So `Measure.get("res/e0")` misses on a freshly opened simulation
+  and only works once something has touched `sim["res"]`; `par` paths work merely
+  because `__init__` loads it eagerly. `from_path` should load the first segment
+  before delegating to dpath. Compounded by the `Measure` repr-cache above, which
+  makes the cold miss stick for the rest of the session.
+- ✅ a storage key containing "/" is unreachable through dpath (it splits the glob on
+  the separator and never considers a literal key holding one), and nested content
+  silently wins when both exist — which is why `Simulation.link` requires an asset
+  key to be a single path component. Hierarchy belongs in a storage's *content*.
 - 🩹 `filters.sqrt_`/`mean_` labels: `nomath` in the label breaks non-math text
   (marked `FIXME` in source).
 - 💡 drop the `mplotter` import from `analysis/filters` (marked `DEL`); the analysis

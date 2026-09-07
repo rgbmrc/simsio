@@ -7,11 +7,19 @@
 
  name | fullname | I/O | typ | description
  ---------------------------------------------------------------------
- log  | log      |   O | txt | cronological summary of the simulation
- res  | results  |   O | bin | measurements to be tabulated or plotted
- par  | params   | I/O | txt | options used by routines and classes
- dat  | data     | I/O | bin | any persistent object, all the above included
- cfg  | config   | I   | txt | subset of par provided as user input
+ log    | log      |   O | txt | cronological summary of the simulation
+ res    | results  |   O | bin | measurements to be tabulated or plotted
+ par    | params   | I/O | txt | options used by routines and classes
+ dat    | data     | I/O | bin | any persistent object, all the above included
+ cfg    | config   | I   | txt | subset of par provided as user input
+ assets | assets   | I/O | txt | registry of the extra assets this sim owns
+
+A handler whose path template contains ``$key`` (e.g. ``dat``) declares an *asset
+family* rather than a single storage: it is not linked at construction, but serves
+as the template ``link`` draws on for extra keys. The ``assets`` registry records
+those links (handler name and serializer, never a resolved path) so that reopening
+the simulation re-links them: `.simsiorc` owns *where* an asset lives, the registry
+owns *how* it is encoded.
 
 """
 
@@ -19,9 +27,11 @@ import logging
 import shlex
 import sys
 import time
+import typing
 import uuid
 from cmath import isnan  # cmath just to be extra safe
-from functools import wraps, partial
+from functools import partial, wraps
+from pathlib import Path
 from string import Template
 from subprocess import run
 
@@ -29,25 +39,32 @@ import dictdiffer
 import dpath
 from numpy.ma import masked  # numpy dependency :(
 
-from simsio.configs import cfg_load, cfg_update_uid, SimsQuery
-from simsio.iocore import Cache
+from simsio.configs import SimsQuery, cfg_load, cfg_update_uid
+from simsio.iocore import Cache, IOHandler
 from simsio.settings import rc
-from simsio.utils import as_scalar, setup_logging
+from simsio.utils import as_scalar, attr_name, setup_logging
 
 __all__ = [
     "Simulation",
     "get_sim",
-    "sim_like_arg",
-    "sims_iter_like_arg",
-    "purge_registry",
     "purge_caches",
-    "valid_uuid",
+    "purge_registry",
+    "sim_like_arg",
     "sim_registry",
+    "sims_iter_like_arg",
+    "valid_uuid",
 ]
 
 logger = logging.getLogger(__name__)
 
+ASSETS = "assets"  # reserved IO key: the per-simulation asset registry
 sim_registry: dict[str, "Simulation"] = {}
+
+
+def _handler(key):
+    """Handler entry for `key`, and whether it is an asset family ($key template)."""
+    tpl = rc["IO-handlers"][key]
+    return tpl, "key" in Template(tpl).get_identifiers()
 
 
 def valid_uuid(uid=None, raise_invalid=False):
@@ -174,7 +191,7 @@ class Simulation(Cache):
         self.cache = {}
 
         for key in rc["IO-handlers"]:
-            if key != "dat":
+            if not _handler(key)[1]:  # keyed templates are families, linked on demand
                 self.link(key)  # setattr as well?
 
         # setup logging
@@ -212,6 +229,34 @@ class Simulation(Cache):
                 msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
                 logger.warning("Config changes\n%s\n%s", msg, "=" * 80)
 
+        # restore the assets registry last: a broken one must not stop par from loading
+        if ASSETS in self.handles:
+            self._restore_assets()
+
+    def _restore_assets(self):
+        try:
+            prev = self.load(ASSETS, cache=False) or {}
+        except FileNotFoundError:
+            prev = {}
+        self[ASSETS] = prev  # a re-run adds to the record, it does not replace it
+        missing = []
+        for key, spec in list(prev.items()):  # link re-registers, i.e. writes into prev
+            try:
+                # touch=False: a registered asset may legitimately be absent, e.g. when
+                # only results/ was shared; an empty file would then mask it as EOFError
+                self.link(key, touch=False, **spec)
+            except Exception:  # a missing serializer must not make the sim unopenable
+                logger.exception("Cannot link registered asset %s", key)
+            else:
+                self.handles[key].storage.is_file() or missing.append(key)
+        if missing:
+            logger.warning("Registered assets with no file: %s", ", ".join(missing))
+
+    @property
+    def assets(self):
+        """Registry of the extra assets owned: {key: link spec}. Linked, not loaded."""
+        return self.data.get(ASSETS, {})
+
     @classmethod
     def from_config(cls, uid, group=None, template=None):
         # before writing/linking anything get config
@@ -228,7 +273,7 @@ class Simulation(Cache):
     # prevent numpy from iterating over self, but might be removed:
     # https://numpy.org/devdocs/reference/arrays.interface.html#object.__array_interface__
     # alternative: __len__ = None, but bool() breaks (and possibly other stuff as well)
-    __array_interface__ = {"shape": (), "typestr": "O"}
+    __array_interface__: typing.ClassVar = {"shape": (), "typestr": "O"}
 
     def __eq__(self, other):
         # implies self.uid == self, to distinguish use "is"
@@ -245,10 +290,20 @@ class Simulation(Cache):
         return self.uid
 
     def _repr_html_(self):
-        # TODO cfg_path:line, dyanimic keys
-        paths = (self.handles["par"].storage, self.handles["log"].storage)
-        links = map('[<a href="{}">{}</a>]'.format, paths, ("par", "log"))
-        return "<tt>" + "".join((self.uid, *links)) + "</tt>"
+        # TODO cfg_path:line
+        def entry(key):
+            h = self.handles.get(key)  # a registered asset may have failed to link
+            if h and h.serializer.typ == "t":  # only text is worth opening
+                return f'<a href="{h.storage}">{key}</a>'
+            return key
+
+        storages = [k for k in rc["IO-handlers"] if k in self.handles]
+        html = f"<kbd>{self.uid}</kbd> " + ", ".join(map(entry, storages))
+        if tail := list(self.assets):  # not declared in the rc (potentially many)
+            summary = f"{html} (+{len(tail)})"
+            details = ", ".join(map(entry, tail))
+            html = f"<details><summary>{summary}</summary>{details}</details>"
+        return html
 
     def __copy__(self):
         new = super().__copy__()
@@ -285,23 +340,72 @@ class Simulation(Cache):
         self["par"] |= info
         return info
 
-    def link(self, key, **link_kw):
-        # TODO:
-        # if key in rc['IO-handlers']:
-        #     raise ValueError(f'IO key {key} is reserved')
+    def link(self, key, via=None, touch=True, **link_kw):
+        """Links `key`, resolving it through the `via` handler if it is not one itself.
 
+        `via` defaults to the key's own handler, else to "dat"; it must name an asset
+        family (a $key template). An asset linked on a writable simulation is recorded
+        in the assets registry, so re-linking one on reopening is idempotent.
+        """
         handlers = rc["IO-handlers"]
-        h = handlers.get(key) or handlers["dat"]
-        h = Template(h).substitute(uid=self.uid, key=key)
+        if via and key in handlers:
+            raise ValueError(f"IO key {key!r} is reserved")
+        via = via or (key if key in handlers else "dat")
+        tpl, keyed = _handler(via)
+        if key in handlers:
+            if keyed:
+                raise ValueError(f"{key!r} is an asset family, not a storage")
+        elif not keyed:
+            raise ValueError(f"handler {via!r} has no $key: cannot host {key!r}")
+        elif Path(key).name != key:  # a separator would escape the family directory
+            raise ValueError(f"asset key {key!r} must be a single path component")
+        register = not self.readonly and ASSETS in self.data and key not in handlers
+        h = Template(tpl).substitute(uid=self.uid, key=key)
         rc_link_kw = dict(
             zip(
                 ("path", "write_mode", "serializer"),
                 (s.strip() for s in h.split(",")),
             ),
         )
-        # TODO: assert path is subpath of a rc directory
-        # https://stackoverflow.com/questions/3812849/how-to-check-whether-a-directory-is-a-sub-directory-of-another-directory
-        return super().link(key, **(rc_link_kw | link_kw))
+        # template-resolved paths cannot escape the rc directory (key is a single component)
+        # explicit path= could, but only reached in readonly mode (_register rejects it)
+        out = super().link(key, touch=touch, **(rc_link_kw | link_kw))
+        if register:
+            self._register(key, {"via": via} | link_kw)
+        return out
+
+    def _register(self, key, spec):
+        if "path" in spec:
+            # the registry stores handler names so that a shared/moved tree still
+            # resolves through the receiver's .simsiorc; a path would freeze the layout
+            raise ValueError("path= cannot be registered, use via=")
+        # record the serializer actually used, even when it came from the handler: the
+        # registry owns encoding, so an asset stays readable if that default changes
+        spec |= {"serializer": attr_name(self.handles[key].serializer)}
+        # bypass __getitem__/setdefault: both would attempt a load
+        self.data[ASSETS][key] = spec
+        logger.debug("Registered asset %s via %s", key, spec["via"])
+
+    def unlink(self, key):
+        self.assets.pop(key, None)
+        return super().unlink(key)
+
+    def stash(self, key, val, **link_kw):
+        """Dumps one asset right away and drops it from the cache, keeping it linked.
+
+        Unlike `dump`, which rewrites every cached writable handle, this writes `key`
+        alone -- so stashing in a loop stays linear -- together with the registry, so
+        that a crash cannot leave an unregistered file behind.
+        """
+        if key not in self.handles or link_kw:
+            self.link(key, **link_kw)
+        self[key] = val
+        keyvals = {key: val}
+        if ASSETS in self.handles:
+            keyvals[ASSETS] = self.assets
+        IOHandler.dump(self, **keyvals)
+        del self[key]
+        return self.handles[key].storage
 
     def dump(self, wait=0, **keyvals):
         if self._save_time and (time.monotonic() - self._save_time < wait):

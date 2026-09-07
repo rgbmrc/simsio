@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import UserDict, namedtuple
 from copy import copy
 from pathlib import Path
@@ -23,18 +24,30 @@ class IOHandler:
         except AttributeError:
             return p + bak  # p string
 
-    def link(self, key, path, write_mode, serializer):
+    def link(self, key, path, write_mode, serializer, touch=True):
         if isinstance(serializer, str):
+            if not serializer:
+                msg = f"{key}: handler declares no serializer, pass serializer=..."
+                raise ValueError(msg)
             serializer = get_module_attr(serializer)()
 
-        path = Path(path).with_suffix(serializer.ext)
+        # with_suffix replaces existing suffix, forbid dotted names
+        raw = Path(path)
+        path = raw.with_suffix(serializer.ext)
+        if path.stem != raw.name:
+            msg = f"{key}: storage name carries a suffix ({raw.name} -> {path.name})"
+            raise ValueError(msg)
+
         if not self.readonly:
             # enusre storge directory exists
             path.parent.mkdir(parents=True, exist_ok=True)
             if write_mode:
-                # check storage file write permission
-                with open(path, "a"):
-                    pass
+                # check write permission upfront, whether or not we create the file
+                if not os.access(path if path.is_file() else path.parent, os.W_OK):
+                    raise PermissionError(f"No write access to {path}")
+                if touch:
+                    with open(path, "a"):
+                        pass
 
         self.handles[key] = IOInfo(path, write_mode, serializer)
         logger.debug(f"Linked {key} with {path}")
@@ -94,6 +107,10 @@ class Cache(UserDict, IOHandler):
         new = super().__copy__()
         new.data = {k: copy(v) for k, v in self.data.items()}
         return new
+
+    def unlink(self, key):
+        super().unlink(key)
+        self.data.pop(key, None)  # else writable raises KeyError on the next dump
 
     def load(self, key, cache=True):
         d = super().load(key)

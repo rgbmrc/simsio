@@ -5,12 +5,18 @@ from math import isclose
 
 from simsio.settings import rc
 
-__all__ = ["get_module_attr", "as_scalar", "as_int", "setup_logging"]
+__all__ = ["as_int", "as_scalar", "attr_name", "get_module_attr", "setup_logging"]
 
 
 def get_module_attr(name):
     mod, attr = name.rsplit(".", 1)
     return getattr(import_module(mod), attr)
+
+
+def attr_name(obj):
+    """Dotted name of a class or of an instance's class; inverse of get_module_attr."""
+    cls = obj if isinstance(obj, type) else type(obj)
+    return f"{cls.__module__}.{cls.__qualname__}"
 
 
 def as_scalar(x):

@@ -10,21 +10,24 @@ from shutil import rmtree
 from string import Template
 
 import dpath
-import ruamel.yaml as yaml
+from ruamel import yaml
 
 from simsio.settings import rc
 
-# from simsio.analysis.collect import uids_sort # TODO by sort_configs but leads to circular imports
+# TODO by sort_configs but leads to circular imports
+# from simsio.analysis.collect import uids_sort
+
+# TODO ensure configs are inside the rc config directory?
+# https://stackoverflow.com/questions/3812849/how-to-check-whether-a-directory-is-a-sub-directory-of-another-directory
 
 __all__ = [
     "SimsQuery",
+    "cfg_gen",
     "cfg_glob",
-    "path_to_group",
-    "group_to_path",
     "cfg_lock",
     "cfg_update",
-    "cfg_update",
-    "cfg_gen",
+    "group_to_path",
+    "path_to_group",
 ]
 
 logger = logging.getLogger(__name__)
@@ -197,13 +200,12 @@ def cfg_sort(glob, keys):
     raise NotImplementedError
     tag = rc["configs"]["header_tag"]
     for p in cfg_glob(glob):
-        with cfg_lock(p) as f:
-            with cfg_update(f) as cfg:
-                header = cfg.pop(tag, None)
-                for u in reversed(uids_sort(cfg, keys)):  # noqa: F821
-                    cfg.insert(0, u, cfg.pop(u))
-                if header:
-                    cfg.insert(0, tag, header)
+        with cfg_lock(p) as f, cfg_update(f) as cfg:
+            header = cfg.pop(tag, None)
+            for u in reversed(uids_sort(cfg, keys)):  # noqa: F821
+                cfg.insert(0, u, cfg.pop(u))
+            if header:
+                cfg.insert(0, tag, header)
 
 
 def cfg_pop(*uids, group=None):
@@ -212,19 +214,18 @@ def cfg_pop(*uids, group=None):
         p, _ = cfg_load(u, group, expand=False)
         cfgs_paths[p].add(u)
     for p, us in cfgs_paths.items():
-        with cfg_lock(p) as f:
-            with cfg_update(f) as cfg:
-                for u in us:
-                    for h in rc["IO-handlers"].values():
-                        glob = h.split(",")[0].strip()
-                        glob = Template(glob).substitute(uid=u, key="*")
-                        for p in Path(dir).glob(u):  # TODO: make recursive?
-                            if p.is_file():
-                                p.unlink()
-                            elif p.is_dir():
-                                rmtree(p)
-                    cfg.pop(u)
-                    logger.info(f"Deleted {u}")
+        with cfg_lock(p) as f, cfg_update(f) as cfg:
+            for u in us:
+                for h in rc["IO-handlers"].values():
+                    glob = h.split(",")[0].strip()
+                    glob = Template(glob).substitute(uid=u, key="*")
+                    for p in Path(dir).glob(u):  # TODO: make recursive?
+                        if p.is_file():
+                            p.unlink()
+                        elif p.is_dir():
+                            rmtree(p)
+                cfg.pop(u)
+                logger.info(f"Deleted {u}")
 
 
 def cfg_gen(template, params, glob=None):
@@ -262,12 +263,12 @@ class SimsQuery:
             # hardcoded default for backward compatibility with old .simsiorc files
             # DEL when default rc file is deployed
             uuid_regex = rc["configs"].get("uuid_regex", "[a-z0-9]{32}")
-            select = re.compile(uuid_regex, re.S).fullmatch
+            select = re.compile(uuid_regex, re.DOTALL).fullmatch
         else:
             select = rc["configs"]["header_tag"].__ne__
         if self.select is not None:
             valid_uuid = select  # keep reference, otherwise recursive select
-            select = lambda u: valid_uuid(u) and self.select(u)  # noqa: E731
+            select = lambda u: valid_uuid(u) and self.select(u)
         # keeps any config that maches a glob, even if no selected uids
         return {
             path_to_group(p): [*filter(select, _cfg_read(p) or [])]
