@@ -476,13 +476,12 @@ def uniq_flat_mask(dat):
 def sm_from_obs(obs, us=None):
     """The `ScalarMappable` for `obs` over the sims `us`, and the `cbar_kwds` its
     colorbar needs. Never touches `obs`: the caller owns where they are stored."""
-    norm = getattr(obs, "norm", None)  # TODO from scale? see mpl.Colorizer.norm (!)
-    cmap = getattr(obs, "cmap", None)
+    # copy: ScalarMappable(norm=my_norm).norm is my_norm, and an obs must not be
+    # scaled by the figures that plot it (see autoscale_norms)
+    norm = copy(getattr(obs, "norm", None)) or colors.Normalize()
+    cmap = copy(plt.get_cmap(getattr(obs, "cmap", None)))
     cbar_kwds = {}
     if us is not None:
-        # copy because ScalarMappable(norm=my_norm).norm is my_norm
-        norm = copy(norm) if norm else colors.Normalize()
-        cmap = copy(plt.get_cmap(cmap))
         uniq = uniq_flat_mask(obs(us))
         if getattr(obs, "digitize", uniq.size < MAX_DIGITIZED):
             cmap = cmap.resampled(uniq.size)
@@ -490,7 +489,9 @@ def sm_from_obs(obs, us=None):
             # wide only if the values are, hence the grid for the even case
             cbar_kwds["ticks"] = ticker.FixedLocator(uniq)
             try:
-                # TODO generalize to log spacing
+                # FIXME linear only: a scale="log" obs gets the right extent from
+                # UniformGrid but a linear norm then misplaces the colors, so the
+                # norm class must follow obs.scale first (see backlog)
                 extent = LinearGrid.from_points(uniq).extent
             except ValueError:
                 if uniq.size == 1:  # a single band: no spacing to read off
