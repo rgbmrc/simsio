@@ -159,7 +159,7 @@ def report_1d(
     # DEL cycler=None hack while cycler not implemented
     dims = dict(zip(REPORT_1D_DIMS, [y_titles, x_titles, None, cbar_obs]))
     # TODO x/y order, cbar
-    xg, br_arrays, titles = _report_dims(ug, dims, [x_obs, y_obs])
+    xg, br_arrays, titles = _report_dims(ug, dims, [x_obs, y_obs], [x_obs, y_obs])
     ug, cbar_obs = br_arrays[0], titles[3]  # cbar_obs may have been a grid dim (...)
     _prepare_grid_kwds(grid_kwds, cbar_mode="single" if cbar_obs else None)
     fig, grid, sides = _report_grid(
@@ -243,7 +243,7 @@ def grid_from_obs(obs, u):
         return (-0.5, len(vals) - 0.5)
 
 
-def _prepare_uids_grid(ug, dims):
+def _prepare_uids_grid(ug, dims, reserve=()):
     try:
         xg = nest_grids(ug, dims.keys(), "dat")
     except TypeError:
@@ -252,7 +252,7 @@ def _prepare_uids_grid(ug, dims):
         ug = np.expand_dims(ug, [i for i, dim in enumerate(dims) if not dim])
     else:
         # OPT modify dims in place instead?
-        xg, dims = transpose_grid(xg, dims)
+        xg, dims = transpose_grid(xg, dims, reserve)
         ug = xg.to_masked_array(copy=False)
     return xg, ug, dims
 
@@ -324,11 +324,11 @@ def _decorations_pad(axs, pos, past_cbar=True):
     return 72 * over  # ScaledTranslation and labelpad work in points
 
 
-def _report_dims(ug, dims, arrays):
+def _report_dims(ug, dims, arrays, reserve=()):
     """Give the report slots their grid dimensions, then broadcast onto them: the uid
-    grid first, then `arrays`. Comes before the figure, whose name needs the obs the
-    slots resolved to."""
-    xg, ug, titles = _prepare_uids_grid(ug, dims)
+    grid first, then `arrays`. `reserve` withholds the dimensions the tiles draw over.
+    Comes before the figure, whose name needs the obs the slots resolved to."""
+    xg, ug, titles = _prepare_uids_grid(ug, dims, reserve)
     return xg, _prepare_arrays(len(dims), [ug, *arrays]), titles
 
 
@@ -420,9 +420,9 @@ def report_2d(
     edge_x = cbar_mode == "edge" and cbar_location in {"top", "bottom"}
     edge_y = cbar_mode == "edge" and cbar_location in {"left", "right"}
 
-    # OPT y_obs, x_obs from xg? dunno what obs does with dims >= 2
     dims = dict(zip(REPORT_2D_DIMS, [y_titles, x_titles]))
-    xg, br_arrays, titles = _report_dims(ug, dims, [obs])
+    # (y, x): the tile images its block as imshow does, rows first
+    xg, br_arrays, titles = _report_dims(ug, dims, [obs], [y_obs, x_obs])
     br_ug = br_arrays[0]  # OPT do we really need the broadcasted ug here?
     fig, grid, sides = _report_grid(
         xg,

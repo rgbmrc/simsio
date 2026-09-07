@@ -150,13 +150,32 @@ def nest_grids(
     return xr.combine_nested(nested, dims, **combine_kwargs).transpose(*dims, ...)
 
 
-def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable]):
+def _dim_names(obs):
+    """The grid-dimension names among `obs`, an arbitrarily nested structure of
+    quantities. Anything that is not a named quantity is skipped."""
+    names = []
+    for o in np.ravel(Function.get_array(obs)):
+        try:
+            names.append(Function.get(o).name)
+        except (TypeError, AttributeError):  # not a quantity, or None
+            pass
+    return names
+
+
+def transpose_grid(
+    grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable], reserve=()
+):
     """Give each slot of `dims` a grid dimension and transpose the grid onto them.
 
     A slot asks for a dimension by name (a Function, Measure or string), for the next
     unclaimed one (`...`), or for none at all (None or False, a size-1 dummy). Unclaimed
     dimensions trail the slots. Returns the transposed grid and one quantity per slot,
     to title it with.
+
+    `reserve` holds the quantities drawn *inside* a tile (x/y observables): the
+    dimensions they name are withheld from the slots and pinned as the trailing axes,
+    in the order given, so that they collapse into a single tile instead of being
+    spread over the grid. Quantities that do not name a dimension are ignored.
 
     """
     # TODO FunctionLike in type hints?
@@ -165,6 +184,10 @@ def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable
     except AttributeError:
         slots = [(f"dim_{i}", o) for i, o in enumerate(dims)]
     free = list(grid.dims)
+    # withheld before any slot can claim them, dummy slots taking their place below
+    reserve = list(dict.fromkeys(d for d in _dim_names(reserve) if d in free))
+    for dim in reserve:
+        free.remove(dim)
     axes, titles = {}, {}
 
     def claim(k, dim):
@@ -187,6 +210,8 @@ def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable
             dim = Function.get(o).name
         except TypeError:  # not a dimension: filled below, keeping the title
             continue
+        if dim in reserve:
+            raise ValueError(f"{dim!r} is both tile content and the {k!r} slot")
         if dim in free:
             claim(k, dim)
     for k, _ in slots:  # the rest, in grid order, then dummies once they run out
@@ -202,4 +227,7 @@ def transpose_grid(grid: xr.DataArray, dims: list[Hashable] | dict[str, Hashable
 
     order = [axes[k] for k, _ in slots]
     grid = grid.expand_dims([dim for dim in order if dim not in grid.dims])
-    return grid.transpose(*order, ...), [Function.get(titles[k]) for k, _ in slots]
+    return (
+        grid.transpose(*order, ..., *reserve),
+        [Function.get(titles[k]) for k, _ in slots],
+    )

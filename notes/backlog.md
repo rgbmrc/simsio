@@ -125,6 +125,11 @@ usually carry the same marker.
   grid axis that `y_obs` does not have. A plain `x_obs` is fine, and the dim
   resolution (`transpose_grid`) is not the culprit — it resolves the same slots with
   or without the crash. `analysis/verify_model.py:194` calls it that way.
+- 💡 `transpose_grid`'s `reserve` pins the tile-content dims in the order given, which
+  only matters when *both* `x_obs` and `y_obs` name dims: the 2-D block is then read
+  `(x, y)` by `report_1d` (call order, `ax.plot` traces the last axis) but `(y, x)` by
+  `report_2d` (rows first, as `imshow`/`annotate_image_axis` want). Fine as is, but the
+  asymmetry is a trap if the two ever get folded into one entry point.
 - 🩹 the figure size ignores whatever the grid draws *outside* its tiles — row and
   column titles, the edge axis labels, the colorbar — so those clip in a plain
   `savefig` (inline backends and `bbox_inches="tight"` hide the problem).
@@ -160,8 +165,9 @@ usually carry the same marker.
   is kept and now resolves named dims before positional ones; `report_1d` and
   `report_2d` share the whole skeleton, so what is left is to fold them into one
   entry point taking the slot list (`REPORT_1D_DIMS` / `REPORT_2D_DIMS`) and the
-  inner loop. Note `x_obs`/`y_obs` are still *not* slots in `report_2d`: we do not
-  know what `obs` does with the dims past the grid.
+  inner loop. `x_obs`/`y_obs` are still not *slots* — they are the complementary
+  `reserve` of `transpose_grid`, withheld from the slots and trailing them — so the
+  fold-together has to thread both.
 - 🚧 `report_1d` accepts a `cycler` grid dimension but it is not implemented
   (`# DEL cycler=None hack while cycler not implemented`).
 - 🚧 `grid_from_obs` is a sketch raising `NotImplementedError`; would give
