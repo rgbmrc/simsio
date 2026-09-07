@@ -290,10 +290,20 @@ class Simulation(Cache):
         return self.uid
 
     def _repr_html_(self):
-        # TODO cfg_path:line, dyanimic keys
-        paths = (self.handles["par"].storage, self.handles["log"].storage)
-        links = map('[<a href="{}">{}</a>]'.format, paths, ("par", "log"))
-        return "<tt>" + "".join((self.uid, *links)) + "</tt>"
+        # TODO cfg_path:line
+        def entry(key):
+            h = self.handles.get(key)  # a registered asset may have failed to link
+            if h and h.serializer.typ == "t":  # only text is worth opening
+                return f'<a href="{h.storage}">{key}</a>'
+            return key
+
+        storages = [k for k in rc["IO-handlers"] if k in self.handles]
+        html = f"<kbd>{self.uid}</kbd> " + ", ".join(map(entry, storages))
+        if tail := list(self.assets):  # not declared in the rc (potentially many)
+            summary = f"{html} (+{len(tail)})"
+            details = ", ".join(map(entry, tail))
+            html = f"<details><summary>{summary}</summary>{details}</details>"
+        return html
 
     def __copy__(self):
         new = super().__copy__()
