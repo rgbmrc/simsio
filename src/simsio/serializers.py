@@ -108,7 +108,8 @@ class JSONSerializer(metaclass=SerializerMeta):
 
     @staticmethod
     def dump(d, f):
-        json.dump(d, f, indent=2, default=lambda o: vars(o))
+        # tolist() covers numpy scalars and arrays, which have no __dict__
+        json.dump(d, f, indent=2, default=lambda o: o.tolist() if hasattr(o, "tolist") else vars(o))
 
 
 class YAMLSerializer(metaclass=SerializerMeta):

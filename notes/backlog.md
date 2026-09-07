@@ -30,8 +30,6 @@ usually carry the same marker.
   only updates `__dict__`) while assigning a fresh `uid`, so the copy's storages
   still point at the original's paths and linking on the copy mutates the original.
   Should re-link every handle under the new uid.
-- 🐛 `JSONSerializer.dump` passes `default=lambda o: vars(o)`, which raises an opaque
-  `TypeError` on numpy scalars. Wants `o.tolist() if hasattr(o, "tolist") else vars(o)`.
 - 🩹 `IOHandler.dump` renames each storage to `.bak` before writing, so a concurrent
   reader can see the file missing for a moment (opens as `{}`/`FileNotFoundError`).
   Pre-existing for `par`/`res`; the assets registry inherits it.
