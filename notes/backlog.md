@@ -73,6 +73,17 @@ usually carry the same marker.
   measures sharing a name collide. `Measure.__init__` papers over this by purging
   caches on redefinition; the warning about overwriting is currently suppressed
   (`quantities.py`, "output a sensible amount of warnings").
+- 🐛 `Measure.from_path`/`Function.get` resolve with `dpath.get`, which globs by
+  *enumeration* over the simulation mapping — and a `Cache` only enumerates keys
+  already loaded. So `Measure.get("res/e0")` misses on a freshly opened simulation
+  and only works once something has touched `sim["res"]`; `par` paths work merely
+  because `__init__` loads it eagerly. `from_path` should load the first segment
+  before delegating to dpath. Compounded by the `Measure` repr-cache above, which
+  makes the cold miss stick for the rest of the session.
+- ✅ a storage key containing "/" is unreachable through dpath (it splits the glob on
+  the separator and never considers a literal key holding one), and nested content
+  silently wins when both exist — which is why `Simulation.link` requires an asset
+  key to be a single path component. Hierarchy belongs in a storage's *content*.
 - 🩹 `filters.sqrt_`/`mean_` labels: `nomath` in the label breaks non-math text
   (marked `FIXME` in source).
 - 💡 drop the `mplotter` import from `analysis/filters` (marked `DEL`); the analysis
