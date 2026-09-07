@@ -185,6 +185,40 @@ usually carry the same marker.
   (`axes_row`/`axes_column`/`__iter__`/`cbar_axes`/`ax.cax`/`set_label_mode`/
   `needs_pad_fit`/`fit_axes_pad`), chosen by a `layout=` kwarg.
 - 💡 use the `DataArray` name in plotting to set the figure path.
+- 🩹 `sm_from_obs` digitizes in *linear* coordinates only: the norm's bounds come
+  from `LinearGrid.from_points(uniq)`, and an unevenly spaced set falls back to
+  `BoundaryNorm`. `UniformGrid.from_points(uniq, obs.scale)` already returns the
+  right extent in data space for a `scale="log"` obs, but that alone is wrong — the
+  norm stays linear, so `1e-7, 1e-6, 1e-5` map to `0.002/0.03/0.32` instead of the
+  band centers `1/6, 1/2, 5/6`. The norm *class* has to follow `obs.scale` (`log` →
+  `LogNorm`, `symlog` → `SymLogNorm` and its params, a general `ScaleBase` →
+  `FuncNorm`), which also raises what to do when an obs declares a norm that
+  disagrees with its scale. This is the old `# TODO from scale? see
+  mpl.Colorizer.norm (!)`.
+- 🩹 `MAX_DIGITIZED = 12` is a silent semantic cliff: 11 distinct values give
+  discrete bands with one tick each, 12 a continuous norm, and adding a single
+  simulation can flip a figure between them with nothing in it saying which
+  happened. `obs.digitize` overrides it, but the default should probably depend on
+  the values (are they a small exact set?) rather than on their count.
+- 🩹 `sm_from_obs` both resamples the cmap to `uniq.size` *and*, in the uneven
+  branch, quantizes through `BoundaryNorm(bin_edges(uniq), uniq.size)` — a double
+  discretization that agrees only because both use the same band count. Verified
+  that `[1,2,5,9]` gets 4 distinct colors, not that each is the band's intended
+  one. The old `# FIXME do not resample then` sat on the even branch.
+- ✅ `add_cbar` draws for whichever tile reaches a shared cax first, and
+  `_cbar_obs_grid`'s aggregation axes do match which tiles feed each bar
+  (`"edge"` + `bottom`/`top` is per column, aggregating over rows). Harmless as
+  long as all tiles sharing a bar share a scaling, which is what that aggregation
+  is for.
+- ✅ `Function.setdefault` (`getattr` or `setattr`) was a mutation trap on the
+  module-level observables that outlive every figure: it read like
+  `dict.setdefault` but wrote to a shared singleton. It had exactly one caller,
+  `sm_from_obs`, whose colorbar-tick bug it caused; removed once that was fixed.
+- ✅ the `norm` instances in `filters.dev_attrs` / `re_or_im_attrs` are built once
+  at import and shared by every Function using those attrs. `compose_attrs`
+  deepcopies, and `sm_from_obs` / `plot_2d_data` / `autoscale_norms` each copy
+  before scaling, so nothing writes through today — but the sharing is load-bearing
+  and undocumented. (`CenteredNorm.scaled()` is correctly `False` when fresh.)
 
 ## packaging, docs & release
 

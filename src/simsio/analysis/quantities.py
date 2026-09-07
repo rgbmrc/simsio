@@ -155,13 +155,6 @@ class Function:
             k: v for k, v in vars(self).items() if not k.startswith("_") and k != "func"
         }
 
-    def setdefault(self, attr, value):
-        try:
-            return getattr(self, attr)
-        except AttributeError:
-            setattr(self, attr, value)
-            return value
-
     @property
     def __name__(self) -> str:
         return self.name
