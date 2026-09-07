@@ -60,6 +60,17 @@ usually carry the same marker.
   the project-side `sims.sh` helpers likewise only scan `results/`, so `data/`
   assets leak from `purge`/`quota`.
 - 💡 `_repr_html_`'s "dynamic keys" TODO is now answerable: link `self.assets` too.
+- ✅ discarded for now: recording the rc storages (`par`/`res`/`log`) in the assets
+  registry, so a simulation still reads correctly after its handler's serializer
+  changes. The upside is real — loading simulations saved with different
+  serializers, without an `rc_context` — and the asymmetry (an asset pins its
+  encoding, an rc storage does not) is not loved. Dropped on clutter: unifying
+  `__init__` needs a bootstrap exception for `assets` itself, which cannot be
+  recorded, plus three conditions on `key in rc["IO-handlers"]` — for `touch`, for
+  the missing-file warning, and because a missing `par` must raise where an absent
+  asset only warns. Mitigation meanwhile: drift fails loudly whenever the extension
+  changes, and `rc_context` accepting a partial mapping (`rc.read_dict`, ~3 lines)
+  would reduce the remedy to a one-liner.
 - ✅ `sims_or_group_arg` returns `Simulation`, not uid.
 - ✅ `Simulation == Simulation.uid`, use `is` to distinguish.
 - ✅ `Simulation.link` rejects keys reserved by `[IO-handlers]` and asserts the
