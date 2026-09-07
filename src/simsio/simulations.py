@@ -239,11 +239,11 @@ class Simulation(Cache):
             prev = {}
         self[ASSETS] = prev  # a re-run adds to the record, it does not replace it
         missing = []
-        for key, spec in prev.items():
+        for key, spec in list(prev.items()):  # link re-registers, i.e. writes into prev
             try:
                 # touch=False: a registered asset may legitimately be absent, e.g. when
                 # only results/ was shared; an empty file would then mask it as EOFError
-                self.link(key, register=False, touch=False, **spec)
+                self.link(key, touch=False, **spec)
             except Exception:  # a missing serializer must not make the sim unopenable
                 logger.exception("Cannot link registered asset %s", key)
             else:
@@ -329,12 +329,12 @@ class Simulation(Cache):
         self["par"] |= info
         return info
 
-    def link(self, key, via=None, register=None, touch=True, **link_kw):
+    def link(self, key, via=None, touch=True, **link_kw):
         """Links `key`, resolving it through the `via` handler if it is not one itself.
 
         `via` defaults to the key's own handler, else to "dat"; it must name an asset
-        family (a $key template). Unless `register` says otherwise, an asset linked on
-        a writable simulation is recorded in the assets registry.
+        family (a $key template). An asset linked on a writable simulation is recorded
+        in the assets registry, so re-linking one on reopening is idempotent.
         """
         handlers = rc["IO-handlers"]
         if via and key in handlers:
@@ -348,8 +348,7 @@ class Simulation(Cache):
             raise ValueError(f"handler {via!r} has no $key: cannot host {key!r}")
         elif Path(key).name != key:  # a separator would escape the family directory
             raise ValueError(f"asset key {key!r} must be a single path component")
-        if register is None:
-            register = not self.readonly and ASSETS in self.data and key not in handlers
+        register = not self.readonly and ASSETS in self.data and key not in handlers
         h = Template(tpl).substitute(uid=self.uid, key=key)
         rc_link_kw = dict(
             zip(
