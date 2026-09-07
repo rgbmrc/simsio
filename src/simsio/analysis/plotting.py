@@ -474,8 +474,11 @@ def uniq_flat_mask(dat):
 
 
 def sm_from_obs(obs, us=None):
+    """The `ScalarMappable` for `obs` over the sims `us`, and the `cbar_kwds` its
+    colorbar needs. Never touches `obs`: the caller owns where they are stored."""
     norm = getattr(obs, "norm", None)  # TODO from scale? see mpl.Colorizer.norm (!)
     cmap = getattr(obs, "cmap", None)
+    cbar_kwds = {}
     if us is not None:
         # copy because ScalarMappable(norm=my_norm).norm is my_norm
         norm = copy(norm) if norm else colors.Normalize()
@@ -483,23 +486,24 @@ def sm_from_obs(obs, us=None):
         uniq = uniq_flat_mask(obs(us))
         if getattr(obs, "digitize", uniq.size < MAX_DIGITIZED):
             cmap = cmap.resampled(uniq.size)
-            cbar_kwds = obs.setdefault("cbar_kwds", {})
+            # one band per value, one tick at its center; the bands are equally
+            # wide only if the values are, hence the grid for the even case
+            cbar_kwds["ticks"] = ticker.FixedLocator(uniq)
             try:
-                # TODO generalize to log and unevenly spaced values
-                grid = LinearGrid.from_points(uniq)
+                # TODO generalize to log spacing
+                extent = LinearGrid.from_points(uniq).extent
             except ValueError:
-                # alternatively: NoNorm, but then sm.to_rgba(z) gives wrong color
-                norm = colors.BoundaryNorm(bin_edges(uniq), uniq.size)
-                cbar_kwds.setdefault("ticks", ticker.FixedLocator(uniq))
-            else:
-                # norm.autoscale_None(grid.extent) # FIXME do not resample then
-                norm.vmin, norm.vmax = grid.extent
-                cbar_kwds.setdefault(
-                    "ticks", ticker.MultipleLocator(grid.step, uniq[0])
-                )
+                if uniq.size == 1:  # a single band: no spacing to read off
+                    extent = (uniq[0] - 0.5, uniq[0] + 0.5)
+                else:
+                    # alternatively: NoNorm, but then sm.to_rgba(z) gives wrong color
+                    norm = colors.BoundaryNorm(bin_edges(uniq), uniq.size)
+                    extent = None
+            if extent is not None and not norm.scaled():
+                norm.vmin, norm.vmax = extent  # a declared norm has the last word
         else:
             norm.autoscale_None(uniq)
-    return cm.ScalarMappable(norm, cmap)
+    return cm.ScalarMappable(norm, cmap), cbar_kwds
 
 
 def _cbar_obs_grid(cbar_obs, ug, grid_kwds):
@@ -513,7 +517,10 @@ def _cbar_obs_grid(cbar_obs, ug, grid_kwds):
         key = tuple(slice(None) if k in agg else i for k, i in enumerate(ij))
         if key not in done:
             done[key] = obs = copy(cbar_obs)
-            obs.sm = sm_from_obs(cbar_obs, ug[key])
+            # onto the copy: the shared cbar_obs must come out of the report unchanged
+            obs.sm, cbar_kwds = sm_from_obs(obs, ug[key])
+            # inferred kwds fill in only what obs does not already declare
+            obs.cbar_kwds = cbar_kwds | _parse_obs_props(obs, "cbar_kwds")
         obs_grid[ij] = done[key]
     return obs_grid
 
