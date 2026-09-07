@@ -151,8 +151,8 @@ def report_1d(
     axes_func=None,
     tile_size=None,
     plot_kwds=None,
-    label_sides=None,
-    title_sides=None,
+    label_side=None,
+    title_side=None,
     fig=None,
     **grid_kwds,
 ):
@@ -170,8 +170,8 @@ def report_1d(
         tile_size,
         fig,
         grid_kwds,
-        label_sides,
-        title_sides,
+        label_side,
+        title_side,
     )
     # one cbar_obs per colorbar, each scaled over the tiles its bar serves
     cbar_obs = cbar_obs and _cbar_obs_grid(cbar_obs, ug, grid_kwds)
@@ -277,23 +277,23 @@ def _prepare_grid_kwds(grid_kwds, **defaults):
         grid_kwds.setdefault(k, v)
 
 
-def _sides(grid_kwds, titled, label_sides=None, title_sides=None):
+def _sides(grid_kwds, titled, label_side=None, title_side=None):
     """Which sides of the grid carry the row/column titles and which the labels.
 
     Titles take the top and left edges, unless the colorbar is there; the labels take
     the opposite edge of a titled direction, or the matplotlib default -- but never a
     side that a per-tile colorbar owns. Both are given as (x, y). An explicit
-    `title_sides` overrides the first rule, colorbar or not: the bars then move out to
+    `title_side` overrides the first rule, colorbar or not: the bars then move out to
     leave the titles the room nearest the tiles.
 
     """
     mode = grid_kwds.get("cbar_mode")
     loc = grid_kwds.get("cbar_location", "right") if mode else None
     titles = tuple(OPPOSITE[s] if s == loc else s for s in ("top", "left"))
-    if title_sides is not None:
-        titles = parse_sides(title_sides, titles)
-    if label_sides is not None:
-        return titles, parse_sides(label_sides)
+    if title_side is not None:
+        titles = parse_sides(title_side, titles)
+    if label_side is not None:
+        return titles, parse_sides(label_side)
     labels = []
     for side, title, has_title in zip(("bottom", "left"), titles, titled):
         side = OPPOSITE[title] if has_title else side
@@ -333,16 +333,16 @@ def _report_dims(ug, dims, arrays):
 
 
 def _report_grid(
-    xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_sides, title_sides
+    xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_side, title_side
 ):
     """The figure and the axes to plot the grid in, sided and labelled."""
     titled = [_titled(titles[1]), _titled(titles[0])]  # x from the columns, y the rows
-    sides = _sides(grid_kwds, titled, label_sides, title_sides)
+    sides = _sides(grid_kwds, titled, label_side, title_side)
     fig = plt.figure(
         fig or _fig_name(xg, label_obs),
         _fig_size(shape, tile_size, grid_kwds["axes_pad"]),
     )
-    grid = AxesGrid(fig, 111, shape, label_sides=sides[1], **grid_kwds)
+    grid = AxesGrid(fig, 111, shape, label_side=sides[1], **grid_kwds)
     return fig, grid, sides
 
 
@@ -390,8 +390,8 @@ def report_2d(
     axes_func=None,
     tile_size=None,
     plot_kwds=None,
-    label_sides=None,
-    title_sides=None,
+    label_side=None,
+    title_side=None,
     fig=None,
     **grid_kwds,
 ):
@@ -432,8 +432,8 @@ def report_2d(
         tile_size,
         fig,
         grid_kwds,
-        label_sides,
-        title_sides,
+        label_side,
+        title_side,
     )
 
     # normalization

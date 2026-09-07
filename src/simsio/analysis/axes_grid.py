@@ -18,14 +18,29 @@ __all__ = ["SIDES", "AxesGrid"]
 
 SIDES = ("left", "bottom", "right", "top")
 OPPOSITE = dict(zip(SIDES, SIDES[2:] + SIDES[:2]))
+ABBREVS = {s[0]: s for s in SIDES}
+
+
+def _resolve_side(side):
+    if side in SIDES:
+        return side
+    try:
+        return ABBREVS[side]
+    except KeyError:
+        raise ValueError(f"{side!r} is not one of {SIDES} or {tuple(ABBREVS)}") from None
 
 
 def parse_sides(sides, default=("bottom", "left")):
-    """(x, y) sides from any subset of them, in any order: "right", ("top", "right")."""
+    """(x, y) sides from any subset of them, in any order, as full names or
+    abbreviated letters -- concatenated in a single string, order irrelevant:
+    "right", ("top", "right"), "lt", "rb"."""
     out = list(default)
-    for side in (sides,) if isinstance(sides, str) else sides:
-        if side not in SIDES:
-            raise ValueError(f"{side!r} is not one of {SIDES}")
+    if isinstance(sides, str) and sides not in SIDES:
+        sides = list(sides)  # split e.g. "lt" into "l", "t"
+    elif isinstance(sides, str):
+        sides = (sides,)
+    for side in sides:
+        side = _resolve_side(side)
         out[side in {"left", "right"}] = side
     return tuple(out)
 
@@ -71,8 +86,9 @@ class AxesGrid(axg.ImageGrid):
     share_x, share_y : bool, default: True
         Share the x-axis down each column and the y-axis along each row, as
         `axg.Grid` does -- `axg.ImageGrid` forces both on.
-    label_sides : side or (side, side), default: ("bottom", "left")
-        Sides carrying the ticks, tick labels and axis labels, given in any order.
+    label_side : side or (side, side), default: ("bottom", "left")
+        Sides carrying the ticks, tick labels and axis labels, given in any order --
+        full names or abbreviated letters, e.g. "lt" or ("top", "left").
     label_mode : {"L", "1", "all", "keep"}, default: "L"
         Which tiles are labelled on those sides: the edge row and column ("L"), only
         the tile where they meet ("1"), all of them, or leave them alone ("keep").
@@ -94,7 +110,7 @@ class AxesGrid(axg.ImageGrid):
         share_y=True,
         aspect=False,
         label_mode="L",
-        label_sides=("bottom", "left"),
+        label_side=("bottom", "left"),
         cbar_mode=None,
         cbar_location="right",
         cbar_pad=None,
@@ -104,14 +120,12 @@ class AxesGrid(axg.ImageGrid):
     ):
         if cbar_mode not in {"each", "single", "edge", None}:
             raise ValueError(f"unknown cbar_mode {cbar_mode!r}")
-        if cbar_location not in SIDES:
-            raise ValueError(f"cbar_location must be one of {SIDES}")
         self._colorbar_mode = cbar_mode  # read back by _init_locators
-        self._colorbar_location = cbar_location
+        self._colorbar_location = _resolve_side(cbar_location)
         self._colorbar_pad = cbar_pad
         self._colorbar_size = cbar_size
         self._share = (share_all or share_x, share_all or share_y)
-        self._label_mode, self._label_sides = "keep", parse_sides(label_sides)
+        self._label_mode, self._label_sides = "keep", parse_sides(label_side)
         # ImageGrid.__init__ hardwires share_x/share_y: only Grid's honours them
         axg.Grid.__init__(
             self,
@@ -134,7 +148,7 @@ class AxesGrid(axg.ImageGrid):
                 ax.cax = self.cbar_axes[self._cbar_index(i)]
                 if cbar_mode == "each":
                     ax.cax.tile = ax  # laid out as one unit, see tile_overhangs
-        self.set_label_mode(label_mode, label_sides)
+        self.set_label_mode(label_mode, label_side)
 
     @property
     def cbar_mode(self):
@@ -259,13 +273,13 @@ class AxesGrid(axg.ImageGrid):
         div.set_horizontal(h)
         div.set_vertical(v)
 
-    def set_label_mode(self, mode=None, sides=None):
+    def set_label_mode(self, mode=None, side=None):
         """Move the ticks, tick labels and axis labels, and choose the tiles carrying
         them. Either argument can be updated alone; see the class docstring. Replaces
         Grid's, which is hardwired to the bottom row and the left column."""
         self._label_mode = mode = mode or self._label_mode
-        if sides is not None:
-            self._label_sides = parse_sides(sides)
+        if side is not None:
+            self._label_sides = parse_sides(side)
         if mode == "keep":
             return
         if mode not in {"L", "1", "all"}:
