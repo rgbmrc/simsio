@@ -26,21 +26,45 @@ usually carry the same marker.
 - 🐛 `configs.cfg_sort` raises `NotImplementedError` on entry; the body references
   `uids_sort`, which cannot be imported without a circular import
   (`configs` ← `analysis.organize`).
+- 🐛 `Simulation.__copy__` shares `handles` with the original (`UserDict.__copy__`
+  only updates `__dict__`) while assigning a fresh `uid`, so the copy's storages
+  still point at the original's paths and linking on the copy mutates the original.
+  Should re-link every handle under the new uid.
+- 🐛 `JSONSerializer.dump` passes `default=lambda o: vars(o)`, which raises an opaque
+  `TypeError` on numpy scalars. Wants `o.tolist() if hasattr(o, "tolist") else vars(o)`.
+- 🩹 `IOHandler.dump` renames each storage to `.bak` before writing, so a concurrent
+  reader can see the file missing for a moment (opens as `{}`/`FileNotFoundError`).
+  Pre-existing for `par`/`res`; the assets registry inherits it.
+- 🩹 `extensions.ext_tenpy.TeNPySimulation.close` reads `self.par`, which does not
+  exist (it is `self["par"]`); the `AttributeError` is swallowed, so `warn_unused`
+  has never fired from there. Fixing the typo needs
+  `par.touch("uuid", "versioning", "monitoring")` in the same commit, or it warns
+  about simsio's own bookkeeping keys on every run.
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
   hardcoded `uuid_regex` fallback for old rc files (`DEL` marked). Shipping one
   would let that go and would fix the drift between per-project rc files
   (e.g. `umps-tests` lacks `uuid_regex`, `template`, `unsafe_update`).
-- 💡 `Simulation.link` should reject keys reserved by `[IO-handlers]` and assert the
-  resolved path stays under an rc-declared directory (both `TODO` in source).
 - 💡 `sim_to_uid`, `uid_to_sim` (like `group_to_path` and vice versa).
 - 💡 allow specifying a config path instead of a group name (especially in `run_sim`).
 - 💡 `sim_class` configurable from `.simsiorc` (`TODO` in `runsim.run_sim`).
 - 💡 `runtime_info(ext_cpu_time=...)` is an ugly hook for `ext_qtea`; find a cleaner
   accounting mechanism.
+- 💡 deprecate the `path=` override in `Simulation.link`: it is the only remaining
+  way to place a storage outside the rc layout, it cannot be registered, and
+  dropping it would close the "assert path stays under an rc directory" TODO
+  outright.
+- 💡 `cfg_pop` should purge an asset's storages via the registry once it is fixed;
+  the project-side `sims.sh` helpers likewise only scan `results/`, so `data/`
+  assets leak from `purge`/`quota`.
+- 💡 `_repr_html_`'s "dynamic keys" TODO is now answerable: link `self.assets` too.
 - ✅ `sims_or_group_arg` returns `Simulation`, not uid.
 - ✅ `Simulation == Simulation.uid`, use `is` to distinguish.
+- ✅ `Simulation.link` rejects keys reserved by `[IO-handlers]` and asserts the
+  resolved path stays under an rc-declared directory (done with the asset registry;
+  a template-resolved path can no longer escape either, the key being a single path
+  component).
 
 ## analysis: quantities & filters
 

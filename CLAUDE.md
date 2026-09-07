@@ -47,6 +47,28 @@ Treat these differently:
   🚑, a crash on a supported path is 🐛), less so for analysis and plotting
   (mostly patches 🩹 of experimental code).
 
+## Asset registry invariants
+
+`Simulation` links the `[IO-handlers]` entries whose template has no `$key`; a `$key`
+template (`dat`, `aux`) declares an *asset family*, resolved on demand by
+`link(key, via=...)`. Extra keys linked on a writable simulation are recorded in the
+`assets` handle and re-linked (never loaded) when the simulation is reopened. Four
+invariants, each load-bearing — do not "simplify" them away:
+
+- **`.simsiorc` owns location, the registry owns encoding.** The record stores the
+  *handler name* plus the serializer actually used, never a resolved path, so a shared
+  or relocated tree resolves through the receiver's rc. `_register` rejects `path=`
+  for this reason.
+- **It is written only through `dump`** (or `stash`, which dumps one asset plus the
+  registry). No write-on-link, so a crash leaves no registration without a file.
+- **No locking**, because `from_config` already renames the config key to `<uuid>~R`
+  under an `fcntl` lock — one writer per uid — and readonly opens never write.
+- **Union, never prune.** A re-run adds to the record; missing files are warned about
+  once at open. Nothing is deleted implicitly (`unlink` is the explicit way).
+
+An rc without an `assets` entry disables all of it, which is the backward-compatibility
+story: no migration for simulations written before this existed.
+
 ## Branches
 
 `develop` is the base branch. A one-commit bugfix or patch can go straight onto
