@@ -36,7 +36,7 @@ Treat these differently:
   (optimization opportunity), `DEL` (dead once X lands), `NOTE`, `HACK`.
 - `ruff` via pre-commit; per-file `# ruff: noqa:` headers where the style is
   deliberate (e.g. lambdas in `quantities`).
-- Commit messages are "gitmoji + scope: description", e.g. `🐛 configs: fix
+- Commit messages are "gitmoji + scope: short description", e.g. `🐛 configs: fix
   locking`, `✨ analysis.filters: logscale devs`.
 - Standard emojis: ✨ feature, 🐛 bug, 🚑 critical hotfix, 🩹 non-critical fix,
   ♻️ refactor, 💥 breaking change, 🚧 WIP, 💩 bad code needing rework, 🔧 config,
