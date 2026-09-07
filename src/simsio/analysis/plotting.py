@@ -11,6 +11,7 @@ from simsio.analysis.axes_grid import (
     OPPOSITE,
     SIDES,
     AxesGrid,
+    overhangs,
     parse_sides,
     tile_overhangs,
 )
@@ -151,6 +152,7 @@ def report_1d(
     tile_size=None,
     plot_kwds=None,
     label_sides=None,
+    title_sides=None,
     fig=None,
     **grid_kwds,
 ):
@@ -159,7 +161,7 @@ def report_1d(
     # TODO x/y order, cbar
     xg, br_arrays, titles = _report_dims(ug, dims, [x_obs, y_obs])
     ug, cbar_obs = br_arrays[0], titles[3]  # cbar_obs may have been a grid dim (...)
-    defaults = _prepare_grid_kwds(grid_kwds, cbar_mode="single" if cbar_obs else None)
+    _prepare_grid_kwds(grid_kwds, cbar_mode="single" if cbar_obs else None)
     fig, grid, sides = _report_grid(
         xg,
         ug.shape[:2],
@@ -169,6 +171,7 @@ def report_1d(
         fig,
         grid_kwds,
         label_sides,
+        title_sides,
     )
     # one cbar_obs per colorbar, each scaled over the tiles its bar serves
     cbar_obs = cbar_obs and _cbar_obs_grid(cbar_obs, ug, grid_kwds)
@@ -190,8 +193,7 @@ def report_1d(
                 ax.cax.set_visible(False)  # no data, no colorbar
         elif obs:
             add_cbar(ax, obs.sm, obs)
-    # an explicit axes_pad is left alone
-    _report_titles(fig, grid, ug, titles, sides, tile_size, "axes_pad" in defaults)
+    _report_titles(fig, grid, ug, titles, sides, tile_size)
     return fig, grid
 
 
@@ -263,9 +265,9 @@ def _prepare_arrays(ndims, it_arrays):
 
 
 def _prepare_grid_kwds(grid_kwds, **defaults):
-    """Fill in the grid defaults, returning the keys they were needed for."""
-    given = set(grid_kwds)
-    # unshared axes need a wider pad, but that is measured later (fit_axes_pad)
+    """Fill in the grid defaults, in place."""
+    # both pads are the *white space*: what the tiles draw into them is measured on
+    # top of it, later, by fit_axes_pad
     defaults = {
         "axes_pad": AXES_PAD,
         "cbar_pad": AXES_PAD,
@@ -273,20 +275,23 @@ def _prepare_grid_kwds(grid_kwds, **defaults):
     } | defaults
     for k, v in defaults.items():
         grid_kwds.setdefault(k, v)
-    return set(grid_kwds) - given
 
 
-def _sides(grid_kwds, titled, label_sides=None):
+def _sides(grid_kwds, titled, label_sides=None, title_sides=None):
     """Which sides of the grid carry the row/column titles and which the labels.
 
     Titles take the top and left edges, unless the colorbar is there; the labels take
     the opposite edge of a titled direction, or the matplotlib default -- but never a
-    side that a per-tile colorbar owns. Both are given as (x, y).
+    side that a per-tile colorbar owns. Both are given as (x, y). An explicit
+    `title_sides` overrides the first rule, colorbar or not: the bars then move out to
+    leave the titles the room nearest the tiles.
 
     """
     mode = grid_kwds.get("cbar_mode")
     loc = grid_kwds.get("cbar_location", "right") if mode else None
     titles = tuple(OPPOSITE[s] if s == loc else s for s in ("top", "left"))
+    if title_sides is not None:
+        titles = parse_sides(title_sides, titles)
     if label_sides is not None:
         return titles, parse_sides(label_sides)
     labels = []
@@ -308,10 +313,14 @@ def _edge_axes(grid, side):
     }[side]
 
 
-def _decorations_pad(axs, pos):
-    """Points to clear whatever `axs` already draw on their `pos` side. Shared by
-    the whole row/column, so that what is placed past it stays aligned."""
-    over = max(tile_overhangs(ax)[SIDES.index(pos)] for ax in axs)
+def _decorations_pad(axs, pos, past_cbar=True):
+    """Points to clear whatever `axs` already draw on their `pos` side, their own
+    colorbar included unless `past_cbar` is off -- then the pad stops at the tile, and
+    what is placed there lands between it and its bar. Shared by the whole row/column,
+    so that what is placed past it stays aligned."""
+    over = max(
+        (tile_overhangs if past_cbar else overhangs)(ax)[SIDES.index(pos)] for ax in axs
+    )
     return 72 * over  # ScaledTranslation and labelpad work in points
 
 
@@ -323,10 +332,12 @@ def _report_dims(ug, dims, arrays):
     return xg, _prepare_arrays(len(dims), [ug, *arrays]), titles
 
 
-def _report_grid(xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_sides):
+def _report_grid(
+    xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_sides, title_sides
+):
     """The figure and the axes to plot the grid in, sided and labelled."""
     titled = [_titled(titles[1]), _titled(titles[0])]  # x from the columns, y the rows
-    sides = _sides(grid_kwds, titled, label_sides)
+    sides = _sides(grid_kwds, titled, label_sides, title_sides)
     fig = plt.figure(
         fig or _fig_name(xg, label_obs),
         _fig_size(shape, tile_size, grid_kwds["axes_pad"]),
@@ -335,17 +346,25 @@ def _report_grid(xg, shape, titles, label_obs, tile_size, fig, grid_kwds, label_
     return fig, grid, sides
 
 
-def _report_titles(fig, grid, ug, titles, sides, tile_size, fit, obs=None, has_cbar=()):
-    """Fit the pads to what the tiles ended up drawing, then title the rows and the
-    columns past those decorations."""
-    if fit and grid.needs_pad_fit():
-        grown = grid.fit_axes_pad(AXES_PAD)
+def _report_titles(fig, grid, ug, titles, sides, tile_size, obs=None, has_cbar=()):
+    """Fit the pads to what the tiles ended up drawing, keeping the grid's axes_pad as
+    the white space on top of it, then title the rows and the columns past those
+    decorations -- or, on the side the colorbars are on, between the tiles and the
+    bars, which are pushed out again to clear the titles."""
+    loc = grid.cbar_location if grid.cbar_mode else None
+    grown = np.zeros(2)
+    fitted = grid.needs_pad_fit() or loc in sides[0]
+    if fitted:
+        grown = grid.fit_axes_pad()
+    has_cbar = has_cbar or (None, None)
+    for side, title, cbar in zip(sides[0], reversed(titles[:2]), has_cbar):
+        grid_titles(_edge_axes(grid, side), side, ug, title, obs, cbar, side != loc)
+    if fitted and loc in sides[0]:  # the fit came before the titles it must now clear
+        grown[SIDES.index(loc) % 2] += grid.fit_cbar_pad()
+    if fitted:
         size = _fig_size(grid.get_geometry(), tile_size, grid.get_axes_pad())
         # the figure never accounted for the colorbar: at least do not shrink the tiles
         fig.set_size_inches(size + grown)
-    has_cbar = has_cbar or (None, None)
-    for side, title, cbar in zip(sides[0], reversed(titles[:2]), has_cbar):
-        grid_titles(_edge_axes(grid, side), side, ug, title, obs, cbar)
     fig.align_labels()
 
 
@@ -372,6 +391,7 @@ def report_2d(
     tile_size=None,
     plot_kwds=None,
     label_sides=None,
+    title_sides=None,
     fig=None,
     **grid_kwds,
 ):
@@ -391,7 +411,7 @@ def report_2d(
     elif cols > 1:
         cbar_mode = "edge"
         cbar_location = "bottom"
-    defaults = _prepare_grid_kwds(
+    _prepare_grid_kwds(
         grid_kwds, aspect=True, cbar_mode=cbar_mode, cbar_location=cbar_location
     )
     cbar_mode, cbar_location = grid_kwds["cbar_mode"], grid_kwds["cbar_location"]
@@ -405,7 +425,15 @@ def report_2d(
     xg, br_arrays, titles = _report_dims(ug, dims, [obs])
     br_ug = br_arrays[0]  # OPT do we really need the broadcasted ug here?
     fig, grid, sides = _report_grid(
-        xg, br_ug.shape[:2], titles, [obs], tile_size, fig, grid_kwds, label_sides
+        xg,
+        br_ug.shape[:2],
+        titles,
+        [obs],
+        tile_size,
+        fig,
+        grid_kwds,
+        label_sides,
+        title_sides,
     )
 
     # normalization
@@ -434,7 +462,6 @@ def report_2d(
         titles,
         sides,
         tile_size,
-        "axes_pad" in defaults,
         obs,
         (label_cbar or edge_x, label_cbar or edge_y),
     )
@@ -555,7 +582,7 @@ def _titled(title):
     return title not in {None, ...}
 
 
-def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
+def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None, past_cbar=True):
     vertical = pos in {"left", "right"}
     ug = np.atleast_2d(ug)
     obs = np.atleast_2d(obs)
@@ -588,7 +615,7 @@ def grid_titles(axs, pos, ug=None, title=None, obs=None, has_cbar=None):
         else:
             ug_titles = obs_titles
     # one pad for the whole row/column, so that the titles line up
-    pad = rcParams["axes.labelpad"] + _decorations_pad(axs, pos)
+    pad = rcParams["axes.labelpad"] + _decorations_pad(axs, pos, past_cbar)
     for ax, t in zip(axs, ug_titles):
         label = add_axis_label(ax, t, pos, labelpad=pad)
         setattr(ax, ("y" if vertical else "x") + "_title", label)

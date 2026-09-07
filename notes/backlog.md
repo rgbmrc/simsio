@@ -95,6 +95,10 @@ usually carry the same marker.
   Two deliberate divergences: tiles are `Size.Scaled(1)` unless `aspect` is on, and a
   relative `cbar_size` ("5%") in `cbar_mode="single"` refers to the grid extent along
   the bar rather than across it, as mpl has it.
+- 🩹 `title_sides` onto the side a per-tile colorbar sits on (`cbar_mode="each"`)
+  grows *every* bar's pad, though only the titled edge row/column has a title to
+  clear: `_cbar_pad_size` is one shared `Size.Fixed`, and per-slot pads would make
+  the tiles unequal. Harmless but airy; the other cbar modes are exact.
 - 💡 grid titles are bare `ax.text` placed by `add_axis_label`, past the decorations
   measured on that side. That is deliberate — it is uniform across the four sides,
   and it keeps the titles of a row/column whose tile was switched off
