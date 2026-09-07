@@ -51,7 +51,7 @@ def set_num_threads(num):
             omp.omp_set_num_threads(int(num))
             return True
 
-    logger.warning("OpenMP library not found: can't set nthreads")
+    logger.warning("OpenMP library not found: can't set ncores")
     return False
 
 

@@ -23,6 +23,7 @@
         "rdev",
         "simsio",
         "simsiorc",
+        "typestr",
         "viridis"
     ],
     "ignoreWords": [],

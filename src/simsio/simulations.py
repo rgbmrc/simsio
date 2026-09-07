@@ -27,6 +27,7 @@ import logging
 import shlex
 import sys
 import time
+import typing
 import uuid
 from cmath import isnan  # cmath just to be extra safe
 from functools import partial, wraps
@@ -272,7 +273,7 @@ class Simulation(Cache):
     # prevent numpy from iterating over self, but might be removed:
     # https://numpy.org/devdocs/reference/arrays.interface.html#object.__array_interface__
     # alternative: __len__ = None, but bool() breaks (and possibly other stuff as well)
-    __array_interface__ = {"shape": (), "typestr": "O"}
+    __array_interface__: typing.ClassVar = {"shape": (), "typestr": "O"}
 
     def __eq__(self, other):
         # implies self.uid == self, to distinguish use "is"
