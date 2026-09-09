@@ -104,16 +104,15 @@ usually carry the same marker.
 
 ## analysis: organize & grids
 
-- 🩹 `organize.uids_grid` warns `discarded N simulations with duplicate coords`
-  without saying *which* coords collided — the usual cause is an under-determined
-  key list, but the message gives nothing to act on. Report the offending coord
-  tuples, or at least the count per duplicate group.
 - 🚧 **numpy → xarray promotion**: grids are `DataArray`s now, but plotting still
   round-trips through masked arrays (`_prepare_uids_grid` → `to_masked_array`).
   Decide whether `Function`/`Measure` objects should become real xarray coords (see
   the commented-out block in `uids_grid`) — that would let `transpose_grid` drop its
   `.name` juggling and the `HACK` branch.
 - ✅ warn on duplicate params in `uids_grid`.
+- ✅ `organize.uids_grid` now reports the offending coord tuple and the discarded
+  uids for each duplicate group, and discards (with a uid-reporting warning) sims
+  that raise while computing a grid key — e.g. a crashed run with incomplete `par`.
 
 ## analysis: plotting
 

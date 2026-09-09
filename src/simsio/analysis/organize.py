@@ -23,7 +23,24 @@ def _get_sims_attrs(sims, keys):
     return {k: k(sims) for k in map(Measure.get, keys)}
 
 
+def _discard_erroring(sims, keys):
+    """Drop sims that raise while computing any of `keys`."""
+    bad = set()
+    for sim in sims:
+        try:
+            for k in keys:
+                k(sim)
+        except ValueError:
+            bad.add(sim.uid)
+    if bad:
+        _uids = ", ".join(bad)
+        warn(f"discarded {len(bad)} sims erroring on grid keys: {_uids}")
+        sims = np.fromiter((s for s in sims if s.uid not in bad), object)
+    return sims
+
+
 def uids_grid(sims, keys) -> xr.DataArray:
+    keys = [*map(Measure.get, keys)]
     match sims:
         case str():
             group = sims
@@ -32,18 +49,23 @@ def uids_grid(sims, keys) -> xr.DataArray:
         case _:
             group = None
     sims = np.fromiter(get_sims_iter(sims), object)  # does not iterate over sim dict
+    sims = _discard_erroring(sims, keys)
     inds = np.empty((len(keys), len(sims)), dtype=np.intp)
-    coords = {}
-    for j, (k, vs) in enumerate(_get_sims_attrs(sims, keys).items()):
-        coords[k], inds[j] = np.unique(vs, return_inverse=True)
+    coords = []
+    for j, vs in enumerate(_get_sims_attrs(sims, keys).values()):
+        _coords, inds[j] = np.unique(vs, return_inverse=True)
+        coords.append(_coords)
     # could call unique on vals directly (as for lexsort in uids_sort)
     # but we need coords anyway and then unique is faster on inds
-    inds, js, counts = np.unique(inds, axis=1, return_index=True, return_counts=True)
-    if duplicate := np.sum(counts - 1):
-        warn(f"discarded {duplicate} simulations with duplicate coords")
-    shape = tuple(map(len, coords.values()))
+    uniq, jj, inv, counts = np.unique(inds, True, True, True, axis=1)
+    for u in np.flatnonzero(counts > 1):
+        bad = np.flatnonzero(inv == u)[1:]
+        _vals = ", ".join(str(coords[ik][iv]) for ik, iv in enumerate(uniq[:, u]))
+        _uids = ", ".join(sims[i].uid for i in bad)
+        warn(f"discarded {len(bad)} sims with duplicate coords ({_vals}): {_uids}")
+    shape = tuple(map(len, coords))
     grid = np.empty(shape, dtype=object)
-    for i, j in zip(inds.T, js):
+    for i, j in zip(uniq.T, jj):
         grid[*i] = sims[j]  # fancy indexing on grid would trigger copy
     # xarray works best with string names
     # https://docs.xarray.dev/en/stable/user-guide/terminology.html#term-name
@@ -52,7 +74,7 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # https://github.com/pydata/xarray/issues/2292#issuecomment-2341989713
     # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
-    return xr.DataArray(grid, coords.values(), tuple(k.name for k in coords), group)
+    return xr.DataArray(grid, coords, tuple(k.name for k in keys), group)
 
 
 @sims_iter_like_arg
