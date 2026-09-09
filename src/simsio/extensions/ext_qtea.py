@@ -3,6 +3,7 @@ from collections import defaultdict
 from inspect import signature
 from itertools import chain
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import qtealeaves as qtea
@@ -61,7 +62,7 @@ def unravel(obs1d, lvals, *, ndim=0, map_type="HilbertCurveMap", argmap=None):
 
 
 class QuantumGreenTeaSimulation(Simulation):
-    unravel_classes = {"TNObsLocal", "TNObsCorr"}
+    unravel_classes: ClassVar = {"TNObsLocal", "TNObsCorr"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -114,7 +115,7 @@ class QuantumGreenTeaSimulation(Simulation):
         # TODO: support parameterized lvals
         posmap = map_selector(model.dim, model.lvals, model.map_type)
         argmap = np.lexsort(tuple(zip(*map(reversed, posmap))))
-        self._unravel_args = dict(argmap=argmap, lvals=model.lvals)
+        self._unravel_args = {"argmap": argmap, "lvals": model.lvals}
 
         # HACK: TODO: test
         qtea_cnv_log = Path(self.qtea_sim.folder_name_output, "convergence.log")
@@ -126,7 +127,7 @@ class QuantumGreenTeaSimulation(Simulation):
         try:
             simsio_cnv_log.hardlink_to(qtea_cnv_log)
         except OSError:
-            logger.error("Could not hardlink convergence file.", exc_info=True)
+            logger.exception("Could not hardlink convergence file.")
 
     def run_qtea_simulation(self, overwrite=True):
         # FIXME: allow selection of what to include based on rc

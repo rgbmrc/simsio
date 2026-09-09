@@ -1,10 +1,10 @@
-import unicodedata
 import hashlib  # noqa: F401
 import re
+import unicodedata
 
 import numpy as np
 
-__all__ = ["is_numeric", "as_ndarray"]
+__all__ = ["as_ndarray", "is_numeric"]
 
 
 def slugify(value, allow_unicode=False):

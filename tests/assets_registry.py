@@ -1,4 +1,5 @@
 # %%
+# ruff: noqa: B018
 """Interactive tour of simsio's per-simulation asset registry (branch core/assets).
 
 Writable sims are built directly, not through ``run_sim``: ``Simulation(None, {},
@@ -18,6 +19,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+
 from simsio import *
 from simsio import purge_caches, purge_registry
 from simsio.analysis.quantities import Measure
@@ -71,7 +73,7 @@ print("assets   :", list(ro.assets))
 print("handles  :", sorted(ro.handles))
 print("gs       :", ro["gs"])
 print("dmrg2 E  :", ro["dmrg2"]["E"])
-ro  # noqa: B018  # html repr: uid + par/log links + collapsed asset list
+ro  # html repr: uid + par/log links + collapsed asset list
 # endregion
 
 # %%

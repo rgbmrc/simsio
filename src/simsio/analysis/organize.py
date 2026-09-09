@@ -1,16 +1,15 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Hashable, Sequence
 from warnings import warn
-from typing import Hashable
 
 import numpy as np
 import xarray as xr
 
 from simsio.analysis.quantities import Function, Measure
 from simsio.configs import SimsQuery
-from simsio.simulations import get_sim, get_sims_iter, sims_iter_like_arg, Simulation
+from simsio.simulations import Simulation, get_sim, get_sims_iter, sims_iter_like_arg
 
-__all__ = ["get_sims_array", "uids_grid", "uids_sort", "stack_grids"]
+__all__ = ["get_sims_array", "stack_grids", "uids_grid", "uids_sort"]
 
 logger = logging.getLogger(__name__)
 np.set_printoptions(formatter={"object": str})
@@ -142,7 +141,7 @@ def _nested_grid_depth(grid):
 
 def nest_grids(
     nested: list,
-    prepend: Sequence[str | Hashable] = None,
+    prepend: Sequence[str | Hashable] | None = None,
     concat_dim: str | Hashable = None,
     **combine_kwargs,
 ) -> xr.DataArray:

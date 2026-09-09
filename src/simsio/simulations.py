@@ -131,8 +131,8 @@ def get_sim(sim_like):
     sim_like = as_scalar(sim_like)  # raises ValueError for non-scalar
     if isinstance(sim_like, Simulation) or sim_like is masked:
         return sim_like  # OPT should we still insert in registry?
-    # None and "" evaluate to False, but nan (xarray's masked) doesn't
-    # check before initializing the Simulation, which may:
+    # None and "" evaluate to False, but nan (xarray's masked)
+    # does not check before initializing the Simulation, which may:
     # generate a dummy uid (None) or raise TypeError (nan)
     # NOTE isnan may raise TypeError, should we let Simulation() validate?
     if not sim_like or not isinstance(sim_like, str) and isnan(sim_like):
@@ -179,7 +179,7 @@ class Simulation(Cache):
             try:
                 self.uid = uid.rsplit("~", 1)[0]
             except AttributeError as e:
-                # otherwise we must catch AttrbiuteError in Measure.__call__
+                # otherwise must catch AttrbiuteError in Measure.__call__
                 msg = f"Expected string-like uid, got {type(uid).__name__}"
                 raise TypeError(msg) from e
         else:
@@ -217,6 +217,7 @@ class Simulation(Cache):
                     shlex.split(cmd),
                     capture_output=True,
                     text=True,
+                    check=False,  # OPT check?
                 ).stdout.strip()
                 for tag, cmd in rc["versioning"].items()
             }

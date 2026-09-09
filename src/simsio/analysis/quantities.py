@@ -1,20 +1,21 @@
-# ruff: noqa: E731 # lambdas are convenient here
+# lambdas are convenient here
 
 import inspect
 import operator
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
 from itertools import chain
-from typing import Callable, Self
+from typing import ClassVar, Self
 
 import dpath
 import matplotlib as mpl
 import numpy as np
 import xarray as xr
 
-from simsio.analysis.utils import is_numeric, as_ndarray
+from simsio.analysis.utils import as_ndarray, is_numeric
 from simsio.simulations import get_sim, purge_caches
 from simsio.utils import as_scalar
 
@@ -22,7 +23,7 @@ __all__ = ["Function", "Measure", "id_", "indices_to_str"]
 
 
 def math_str(val):
-    return f"${str(val)}$" if is_numeric(val) else str(val)
+    return f"${val!s}$" if is_numeric(val) else str(val)
 
 
 def nomath(text):
@@ -85,11 +86,11 @@ def indices_to_str(inds) -> str:
 
 
 class Function:
-    _register = {}
-    INVALID_NAMES = {None, "<lambda>", "None"}
-    MERGED_ATTRS = {"line", "image", "axis", "cbar", "legend"}
+    _register: ClassVar[dict] = {}
+    INVALID_NAMES: ClassVar[set] = {None, "<lambda>", "None"}
+    MERGED_ATTRS: ClassVar[set] = {"line", "image", "axis", "cbar", "legend"}
 
-    def __init__(self, func: Callable, _from: dict | Self = None, **attrs):
+    def __init__(self, func: Callable, _from: dict | Self | None = None, **attrs):
         if not callable(func):
             raise TypeError(f"{func} is not callable")
         if _from:
@@ -269,7 +270,7 @@ class Function:
                 func = lambda x: op(self.func(x))
             elif swap:
                 # swap before lambda to avoid late binding closure issues
-                self, other = other, self
+                self, other = other, self  # noqa: PLW0642
                 func = lambda x: op(self, other.func(x))
             else:
                 func = lambda x: op(self.func(x), other)
@@ -388,7 +389,7 @@ class Function:
             return func
         cls_wrapped = type(getattr(func, "func", None))
         if issubclass(cls_wrapped, cls):
-            cls = cls_wrapped
+            return cls_wrapped(func)
         return cls(func)
 
     @classmethod

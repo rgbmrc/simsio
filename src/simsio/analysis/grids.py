@@ -56,12 +56,12 @@ class LinearGrid:
 
     def __init__(
         self,
-        extent: float | tuple[float, float] = None,
-        num: int = None,
+        extent: float | tuple[float, float] | None = None,
+        num: int | None = None,
         *,
-        step: float = None,
+        step: float | None = None,
         anchor: float = 0.0,
-        origin: float = None,
+        origin: float | None = None,
         periodic: bool = False,
     ):
         if num is None and extent is None:
@@ -253,7 +253,7 @@ class LinearGrid:
         return dual
 
     def broadcast_to(self, num: int) -> Self:
-        # TODO deprecate, this is not unique! e.g.
+        # TODO this is not unique! e.g.
         # 3>2>8, 3>4>8, 3>9>8 are all valid
         # with larger numbers problems less likely (?)
         """Broadcasts the current grid to a new one with given 'num'.
@@ -262,7 +262,7 @@ class LinearGrid:
 
         """
 
-        DeprecationWarning("Deprecated, not unique!")
+        raise DeprecationWarning("Deprecated, not unique!")
 
         def _rgfactor(n_new, n_old):
             # returns n_old / n_new if n_old is a multiple or divisor of n_new, otherwise None

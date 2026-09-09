@@ -68,8 +68,8 @@ class NPZSerializer(metaclass=SerializerMeta):
     def load(f):
         if _eof(f):
             return {}
-        with np.load(f) as f:
-            return dict(f)  # np.load is lazy for .npz files
+        with np.load(f) as data:
+            return dict(data)  # np.load is lazy for .npz files
 
     @staticmethod
     def dump(d, f):
@@ -109,7 +109,8 @@ class JSONSerializer(metaclass=SerializerMeta):
     @staticmethod
     def dump(d, f):
         # tolist() covers numpy scalars and arrays, which have no __dict__
-        json.dump(d, f, indent=2, default=lambda o: o.tolist() if hasattr(o, "tolist") else vars(o))
+        default = lambda o: o.tolist() if hasattr(o, "tolist") else vars(o)
+        json.dump(d, f, indent=2, default=default)
 
 
 class YAMLSerializer(metaclass=SerializerMeta):

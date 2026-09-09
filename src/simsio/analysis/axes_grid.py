@@ -27,7 +27,7 @@ def _resolve_side(side):
     try:
         return ABBREVS[side]
     except KeyError:
-        raise ValueError(f"{side!r} is not one of {SIDES} or {tuple(ABBREVS)}") from None
+        raise ValueError(f"{side!r} not among {SIDES + tuple(ABBREVS)}") from None
 
 
 def parse_sides(sides, default=("bottom", "left")):
