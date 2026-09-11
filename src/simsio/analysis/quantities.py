@@ -197,6 +197,7 @@ class Function:
             raise ValueError(f"Error computing {self!r} on {args}, {kwds}") from e
 
     def __matmul__(self, other):
+        # not type(self).from_callable: in a @ b, b maps results, it never takes sims
         other = Function.from_callable(other)
         attrs = self.compose_attrs(self, other)
         if other.default is _DEFAULT_SENTINEL and self.default is not _DEFAULT_SENTINEL:
@@ -385,8 +386,11 @@ class Function:
     @classmethod
     def from_callable(cls, func):
         """Pass subclasses through."""
+        # note: cls.from_callable(+measure) -> cls
+        # even though its .func is a Measure, +measure itself is a Function
         if isinstance(func, cls):
             return func
+        # partial wrapping subclass -> subclass(**kwds)
         cls_wrapped = type(getattr(func, "func", None))
         if issubclass(cls_wrapped, cls):
             return cls_wrapped(func)
