@@ -228,7 +228,11 @@ class Simulation(Cache):
             if diff:
                 dictdiffer.patch(diff, par, in_place=True)
                 msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
-                logger.warning("Config changes\n%s\n%s", msg, "=" * 80)
+                # pure additions are the normal case (fresh sim, or a new option on a
+                # re-run): only a changed value deserves to stand out in the log
+                changed = any(d[0] != "add" for d in diff)
+                level = logging.WARNING if changed else logging.INFO
+                logger.log(level, "Config changes\n%s\n%s", msg, "=" * 80)
 
         # restore the assets registry last: a broken one must not stop par from loading
         if ASSETS in self.handles:
