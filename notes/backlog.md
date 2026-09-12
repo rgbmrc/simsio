@@ -58,6 +58,22 @@ usually carry the same marker.
   the project-side `sims.sh` helpers likewise only scan `results/`, so `data/`
   assets leak from `purge`/`quota`.
 - 💡 `_repr_html_`'s "dynamic keys" TODO is now answerable: link `self.assets` too.
+- ✅ discarded: promoting the whole `par` tree to tenpy `Config`s in
+  `ext_tenpy.TeNPyYAMLSerializer.load`, so that every section reaches the algorithm
+  that consumes it with logging and unused-option tracking attached. Two obstacles,
+  both in `Simulation.__init__`. (i) The config merge grafts raw `cfg` subtrees into
+  `par`, so whatever `load` returns is diluted on a fresh run; restoring it needs a
+  serializer hook (`adapt`: plain -> rich, applied after the patch) — that part works,
+  ~5 lines. (ii) `dictdiffer` then walks a `Config` as a plain `MutableMapping`: it
+  reads every option through `__getitem__` (a wall of INFO lines, and every option
+  marked used, which *suppresses* genuine unused warnings) and `deepcopy`s subtrees
+  it discards, each corpse warning from `Config.__del__`. Fixing that needs the
+  inverse hook too (`raw`: rich -> plain, to diff and patch on plain data). Even then,
+  a restart re-promotes the defaults tenpy wrote back into `params.yaml`, including
+  sections it never reads when the feature is off (`mixer_params`), which warn as
+  unused. Lazy promotion at the use site (`sim["par"].subconfig("dmrg2")`) gives the
+  same result on a fresh run with none of this; revisit only if a backend needs a
+  rich `par` that a plain-dict merge cannot produce.
 - ✅ discarded for now: recording the rc storages (`par`/`res`/`log`) in the assets
   registry, so a simulation still reads correctly after its handler's serializer
   changes. The upside is real — loading simulations saved with different
