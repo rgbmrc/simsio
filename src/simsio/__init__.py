@@ -1,6 +1,6 @@
+from simsio.settings import *  # noqa: I001
 from simsio.configs import *
 from simsio.runsim import *
-from simsio.settings import *
 from simsio.simulations import *
 
 __all__ = [

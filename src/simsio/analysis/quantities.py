@@ -1,5 +1,3 @@
-# lambdas are convenient here
-
 import inspect
 import operator
 import re
