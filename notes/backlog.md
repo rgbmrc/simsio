@@ -74,6 +74,10 @@ usually carry the same marker.
   unused. Lazy promotion at the use site (`sim["par"].subconfig("dmrg2")`) gives the
   same result on a fresh run with none of this; revisit only if a backend needs a
   rich `par` that a plain-dict merge cannot produce.
+- 💡 if the item above is revisited, the merge belongs in
+  `ext_tenpy.TeNPySimulation`, not in `Simulation`: override the `cfg`/`par` merge
+  there, diffing and patching `Config`-aware (or on `par.as_dict()`, patching back
+  into the live tree), and leave the core free of backend hooks.
 - ✅ discarded for now: recording the rc storages (`par`/`res`/`log`) in the assets
   registry, so a simulation still reads correctly after its handler's serializer
   changes. The upside is real — loading simulations saved with different
