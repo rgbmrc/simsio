@@ -101,7 +101,7 @@ def adev(x):
     return y - ref
 
 
-adev_log = Measure(adev @ abs_, scale="log")
+adev_log = Function(adev @ abs_, scale="log")
 
 
 @Function.register(label=r"{x}$\text{{ rel. dev.}}$".format, **dev_attrs)
@@ -110,7 +110,7 @@ def rdev(x):
     return y / np.abs(ref) - np.sign(ref)
 
 
-rdev_log = Measure(rdev @ abs_, scale="log")
+rdev_log = Function(rdev @ abs_, scale="log")
 
 
 def dev_obs(x, y, dev=adev, first=False):

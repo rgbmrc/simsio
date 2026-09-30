@@ -252,6 +252,8 @@ class Function:
         for k, v in b.items():
             if k in cls.MERGED_ATTRS:
                 attrs[k] |= v
+            elif k == "cached":  # cached by name: nothing built on an uncached one is
+                attrs[k] = attrs.get(k, True) and v
             else:
                 attrs[k] = v
         return attrs
@@ -555,7 +557,7 @@ class Measure(Function):
 
     def __matmul__(self, other):
         if isinstance(other, Measure):
-            # compose with other.__call__
+            # compose with other.__call__: self returns sims, e.g. organize.ref_sims
             other = +other
         comp = super().__matmul__(other)
         comp.base = self.base
