@@ -338,10 +338,12 @@ def _report_grid(
     """The figure and the axes to plot the grid in, sided and labelled."""
     titled = [_titled(titles[1]), _titled(titles[0])]  # x from the columns, y the rows
     sides = _sides(grid_kwds, titled, label_side, title_side)
-    fig = plt.figure(
-        fig or _fig_name(xg, label_obs),
-        _fig_size(shape, tile_size, grid_kwds["axes_pad"]),
-    )
+    # given a SubFigure, plt.figure returns the root figure, not the subfigure
+    if not isinstance(fig, mpl.figure.FigureBase):
+        fig = plt.figure(
+            fig or _fig_name(xg, label_obs),
+            _fig_size(shape, tile_size, grid_kwds["axes_pad"]),
+        )
     grid = AxesGrid(fig, 111, shape, label_side=sides[1], **grid_kwds)
     return fig, grid, sides
 
@@ -361,7 +363,8 @@ def _report_titles(fig, grid, ug, titles, sides, tile_size, obs=None, has_cbar=(
         grid_titles(_edge_axes(grid, side), side, ug, title, obs, cbar, side != loc)
     if fitted and loc in sides[0]:  # the fit came before the titles it must now clear
         grown[SIDES.index(loc) % 2] += grid.fit_cbar_pad()
-    if fitted:
+    # no set_size_inches for SubFigure
+    if fitted and isinstance(fig, mpl.figure.Figure):
         size = _fig_size(grid.get_geometry(), tile_size, grid.get_axes_pad())
         # the figure never accounted for the colorbar: at least do not shrink the tiles
         fig.set_size_inches(size + grown)
