@@ -186,6 +186,8 @@ def nest_grids(
 def _dim_names(obs):
     """The grid-dimension names among `obs`, an arbitrarily nested structure of
     quantities. Anything that is not a named quantity is skipped."""
+    if isinstance(obs, (list, tuple)):  # possibly ragged, e.g. [x_obs, [y1, y2]]
+        return [n for o in obs for n in _dim_names(o)]
     names = []
     for o in np.ravel(Function.get_array(obs)):
         try:
