@@ -26,6 +26,7 @@ __all__ = [  # noqa: RUF022
     "norm_",
     # abs & rel deviation
     "dev_obs",
+    "dev_ref",
     "adev",
     "rdev",
     "adev_log",
@@ -118,6 +119,15 @@ def dev_obs(x, y, dev=adev, first=False):
     if first:
         x, y = x[::-1], y[::-1]
     return x[:-1], y @ dev
+
+
+def dev_ref(y, ref, dev=adev):
+    """`dev` of `y` from its value on the `ref` sims, see `organize.ref_sims`."""
+    y = +y
+    name = Function.compose_names(y, "{a}|{b}", ref)
+    res = Function(lambda us: np.ma.stack([y(us), y(ref(us))]), y, name=name) @ dev
+    res.label = Function.compose_labels(res, "{a} ({b})", ref)
+    return res
 
 
 @Function.register(label=r"$\mathcal{F}$")

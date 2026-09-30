@@ -9,7 +9,7 @@ from simsio.analysis.quantities import Function, Measure
 from simsio.configs import SimsQuery
 from simsio.simulations import Simulation, get_sim, get_sims_iter, sims_iter_like_arg
 
-__all__ = ["get_sims_array", "stack_grids", "uids_grid", "uids_sort"]
+__all__ = ["get_sims_array", "ref_sims", "stack_grids", "uids_grid", "uids_sort"]
 
 logger = logging.getLogger(__name__)
 np.set_printoptions(formatter={"object": str})
@@ -74,6 +74,18 @@ def uids_grid(sims, keys) -> xr.DataArray:
     # coords = {k.name: v for k, v in uniq.items()}
     # coords |= {k: (k.name, v) for k, v in uniq.items()}
     return xr.DataArray(grid, coords, tuple(k.name for k in keys), group)
+
+
+def ref_sims(ug: xr.DataArray, **sel) -> Measure:
+    """Measure mapping each sim of `ug` to the one at the coords `sel`, all other
+    coords equal (None if missing or not in `ug`). E.g. `ref_sims(ug, L=6) @ e0`, or
+    `filters.dev_ref`, compare each plot line to a reference one."""
+    ref = ug.sel(sel, drop=True).broadcast_like(ug).transpose(*ug.dims)
+    refs = {s.uid: r for s, r in zip(ug.values.flat, ref.values.flat) if s}
+    name = "ref(" + ",".join(f"{k}={v}" for k, v in sel.items()) + ")"
+    label = Measure.strings([*map(Measure.get, sel)], vals=sel.values(), junc=",")
+    # uncached: refs of equal sel on different grids share the name, hence the key
+    return Measure(lambda s: refs.get(s.uid), name=name, label=label, cached=False)
 
 
 @sims_iter_like_arg
