@@ -212,7 +212,7 @@ class Simulation(Cache):
         # merge config & runtime info into params
         if not readonly:
             cfg["uuid"] = self.uid
-            cfg["versioning"] = {
+            versions = {
                 tag: run(
                     shlex.split(cmd),
                     capture_output=True,
@@ -221,6 +221,8 @@ class Simulation(Cache):
                 ).stdout.strip()
                 for tag, cmd in rc["versioning"].items()
             }
+            # empty output, e.g. `printenv` of an unset variable, records nothing
+            cfg["versioning"] = {tag: v for tag, v in versions.items() if v}
 
             # update params
             diff = dictdiffer.diff(par, cfg, expand=True)

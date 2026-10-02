@@ -21,6 +21,7 @@ usually carry the same marker.
 
 `settings`, `configs`, `iocore`, `serializers`, `simulations`, `runsim`.
 
+- 💡 `settings`: read `lib/simsio/.simsiorc` (or a packaged copy) as defaults under the project's `.simsiorc`; today each `rc.get` carries its own `fallback=`.
 - 🐛 `configs.cfg_pop` iterates `Path(dir).glob(u)` where `dir` is the builtin, and
   the glob ignores the handler path template it just built.
 - 🐛 `configs.cfg_sort` raises `NotImplementedError` on entry; the body references
@@ -97,6 +98,14 @@ usually carry the same marker.
   resolved path stays under an rc-declared directory (done with the asset registry;
   a template-resolved path can no longer escape either, the key being a single path
   component).
+
+## vcs
+
+`python -m simsio.vcs`, the per-launch snapshot recorded as `versioning.git_snapshot`.
+
+- 💡 drift check: at sim start, rebuild the worktree tree in a temp index (no commit or ref) and warn in `info.log` if it differs from the snapshot's tree, flagging sims that `xargs` started after a mid-batch edit. Trees must be compared per repo, because submodule snapshot commits differ by timestamp. Noisy, since harmless edits (e.g. analysis scripts) also trip it.
+- 🩹 a nested non-submodule repo (e.g. `resources/manuel-notes/`) goes in as a bare gitlink to its HEAD: its dirty state is lost and the commit may not be fetchable. git's "embedded repository" warning is captured and discarded.
+- 💡 identical consecutive snapshots (same tree, same HEAD) each get a new commit and ref; reuse the latest `refs/simsio/*` instead when the tree matches.
 
 ## analysis: quantities & filters
 

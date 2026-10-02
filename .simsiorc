@@ -17,6 +17,10 @@ unsafe_update = true
 
 [versioning]
 git_revision = git rev-parse HEAD
+git_snapshot = printenv SIMSIO_SNAPSHOT
+
+[versioning.snapshot]
+max_untracked = 10M # untracked files above this size are left out of snapshots
 
 [logging-format]
 format = %(asctime)s %(levelname)-8s | %(message)s
