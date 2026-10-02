@@ -128,6 +128,12 @@ usually carry the same marker.
   (marked `FIXME` in source).
 - 💡 drop the `mplotter` import from `analysis/filters` (marked `DEL`); the analysis
   layer should not hard-depend on a personal plotting fork. Gates a release.
+- 🐛 `Measure.exact` (a conventional attr, consumed by `filters.dev_exact`) is copied
+  wholesale by every composition path (`lazy_operator`, `__getitem__`, `__matmul__`,
+  partial `__call__`), so `vector_gap - 2*m`, `mass_gaps[0]` or `dev_exact(y)` itself
+  silently carry a stale reference. Plan (mirror what `filter` already does, make
+  `compose_attrs` drop `exact`, propagate only where valid, `exact=True` for
+  parameters): `notes/simsio-measure-exact-propagation.md`.
 - 💡 `Function == Function.name`, `is` to distinguish? Justified if we make them
   singletons, but we still need to allow copies with different attrs. Then
   `F is not F_copy`, which seems fine because `==` should also have returned False

@@ -27,6 +27,7 @@ __all__ = [  # noqa: RUF022
     # abs & rel deviation
     "dev_obs",
     "dev_ref",
+    "dev_exact",
     "adev",
     "rdev",
     "adev_log",
@@ -128,6 +129,13 @@ def dev_ref(y, ref, dev=adev):
     res = Function(lambda us: np.ma.stack([y(us), y(ref(us))]), y, name=name) @ dev
     res.label = Function.compose_labels(res, "{a} ({b})", ref)
     return res
+
+
+def dev_exact(y, dev=adev):
+    """`dev` of the measure `y` from its ``exact`` attr (a Measure on the same sims)."""
+    y = +y
+    name = Function.compose_names(y, "{a}|exact")
+    return Function(lambda us: np.ma.stack([y(us), y.exact(us)]), y, name=name) @ dev
 
 
 @Function.register(label=r"$\mathcal{F}$")
