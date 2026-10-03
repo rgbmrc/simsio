@@ -92,6 +92,8 @@ usually carry the same marker.
   asset only warns. Mitigation meanwhile: drift fails loudly whenever the extension
   changes, and `rc_context` accepting a partial mapping (`rc.read_dict`, ~3 lines)
   would reduce the remedy to a one-liner.
+- 🩹 `Simulation(uid)` with `readonly=True` and no `par` file does not raise:
+  `FileNotFoundError` is swallowed and `par` becomes `{}` (`simulations.py`, ~l.208), so a mistyped or missing uid yields an empty sim that fails later and misleadingly, e.g. `KeyError` on `sim["res"]`. Probably should raise, but unverified: analysis may rely on empty sims for masked/missing grid points (`get_sim`, `masked`). Check callers before changing.
 - ✅ `sims_or_group_arg` returns `Simulation`, not uid.
 - ✅ `Simulation == Simulation.uid`, use `is` to distinguish.
 - ✅ `Simulation.link` rejects keys reserved by `[IO-handlers]` and asserts the
