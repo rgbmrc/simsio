@@ -172,6 +172,9 @@ def sims_iter_like_arg(func_sims=None, expand=False):
 
 
 class Simulation(Cache):
+    save_extras = True
+    """Whether `stash(..., extra=True)` writes; `run_sim` sets it from --save-extras."""
+
     def __init__(self, uid=None, cfg=None, readonly=True):
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
@@ -397,13 +400,19 @@ class Simulation(Cache):
         self.assets.pop(key, None)
         return super().unlink(key)
 
-    def stash(self, key, val, **link_kw):
+    def stash(self, key, val, extra=False, **link_kw):
         """Dumps one asset right away and drops it from the cache, keeping it linked.
 
         Unlike `dump`, which rewrites every cached writable handle, this writes `key`
         alone -- so stashing in a loop stays linear -- together with the registry, so
         that a crash cannot leave an unregistered file behind.
+
+        An `extra` (bulk, optional) asset is skipped, neither linked nor registered,
+        unless `save_extras`. Returns the storage, or None if skipped.
         """
+        if extra and not self.save_extras:
+            logger.debug("Extra %r not saved (see --save-extras)", key)
+            return None
         if key not in self.handles or link_kw:
             self.link(key, **link_kw)
         self[key] = val

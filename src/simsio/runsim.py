@@ -84,6 +84,11 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     parser.add_argument("group", type=str, help="group match pattern")
     parser.add_argument("uid", type=str, help="unique identifier of the simulation")
     parser.add_argument("ncores", type=int, help="number of CPU cores to use")
+    parser.add_argument(
+        "--save-extras",
+        action="store_true",
+        help="write assets stashed with extra=True (skipped otherwise, never deleted)",
+    )
     args = parser.parse_args(args=sys.argv[1:delim])
     set_num_threads(args.ncores)
     if isinstance(sim_class, str):
@@ -98,6 +103,7 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
         else:
             raise
     sim.ini_args = args
+    sim.save_extras = args.save_extras
     sim.run_args = sys.argv[delim + 1 :]
     try:
         yield sim
