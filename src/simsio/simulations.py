@@ -40,7 +40,7 @@ from numpy.ma import masked  # numpy dependency :(
 
 from simsio.configs import SimsQuery, cfg_load, cfg_update_uid
 from simsio.iocore import Cache, IOHandler
-from simsio.settings import rc
+from simsio.settings import check_rc, rc
 from simsio.utils import as_scalar, attr_name, get_module_attr, setup_logging
 
 __all__ = [
@@ -185,11 +185,7 @@ class Simulation(Cache):
     """Whether `stash(..., extra=True)` writes; `run_sim` sets it from --save-extras."""
 
     def __init__(self, uid=None, cfg=None, readonly=True):
-        if META not in rc["IO-handlers"] or "vcs" not in rc:
-            raise ValueError(
-                "the rc needs a `meta` entry in [IO-handlers] and a [vcs] section "
-                "(they replace `assets` and [versioning])"
-            )
+        check_rc()
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
         if uid and readonly:
@@ -240,7 +236,7 @@ class Simulation(Cache):
                     text=True,
                     check=False,  # OPT check?
                 ).stdout.strip()
-                for tag, cmd in rc["vcs"].items()
+                for tag, cmd in (rc["vcs"] if rc.has_section("vcs") else {}).items()
             }
             # empty output, e.g. `printenv` of an unset variable, records nothing
             vcs = {tag: v for tag, v in versions.items() if v}
