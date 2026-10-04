@@ -34,11 +34,14 @@ usually carry the same marker.
 - 🩹 `IOHandler.dump` renames each storage to `.bak` before writing, so a concurrent
   reader can see the file missing for a moment (opens as `{}`/`FileNotFoundError`).
   Pre-existing for `par`/`res`; the assets registry inherits it.
-- 🩹 `extensions.ext_tenpy.TeNPySimulation.close` reads `self.par`, which does not
-  exist (it is `self["par"]`); the `AttributeError` is swallowed, so `warn_unused`
-  has never fired from there. Fixing the typo needs
-  `par.touch("uuid", "versioning", "monitoring")` in the same commit, or it warns
-  about simsio's own bookkeeping keys on every run.
+- ✅ `extensions.ext_tenpy.TeNPySimulation` now owns the `Config`: `par` is cast to one
+  after the cfg merge, only when writable (`TeNPyYAMLSerializer.load` no longer wraps,
+  so read-only/analysis `par` is a plain dict and `Config.__del__` cannot warn about
+  unread keys there). `close` reports unused options deterministically, after touching
+  simsio's own `uuid`/`versioning`/`monitoring`. `Simulation.runtime_info` no longer uses
+  `dpath.get` on `par`: it walked the tree and read every value, marking all options
+  used at each `dump`. Run scripts need `sim_class=TeNPySimulation` (see the 💡 on
+  `sim_class` in rc, which would also let `get_sim` pick it).
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
@@ -62,8 +65,9 @@ usually carry the same marker.
 - ✅ discarded, because `sim["par"].subconfig("dmrg2")` at the use site is enough:
   promoting the whole `par` tree to tenpy `Config`s in
   `ext_tenpy.TeNPyYAMLSerializer.load`, so that every section reaches the algorithm
-  that consumes it with logging and unused-option tracking attached. `load` already
-  guarantees the *root* is a `Config`, which is all `subconfig` needs; a section is
+  that consumes it with logging and unused-option tracking attached. A writable
+  `TeNPySimulation` already makes the *root* a `Config` (cast after the merge, so
+  obstacle ii below no longer touches the root), which is all `subconfig` needs; a section is
   then promoted once, on demand, and stored back into `par`. Revisit only if a
   backend needs a rich `par` that a plain-dict merge cannot produce — three obstacles
   found while trying. (i) The config merge in `Simulation.__init__` grafts raw `cfg`
