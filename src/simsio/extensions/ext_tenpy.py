@@ -21,14 +21,17 @@ class TeNPyYAMLSerializer(YAMLSerializer):
         )
         return yaml
 
-    def load(self, f):
-        return asConfig(super().load(f), "Root")
-
 
 class TeNPySimulation(Simulation):
+    """`par` is a tenpy `Config` only while writing: unused-option tracking belongs to a
+    running simulation, and would otherwise warn whenever a read-only one is collected."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.readonly:  # after the cfg merge, which must run on plain data
+            self["par"] = asConfig(self["par"], "Root")
+
     def close(self):
-        try:
-            self.par.warn_unused(recursive=True)
-        except AttributeError:
-            pass
+        if not self.readonly:
+            self["par"].warn_unused(recursive=True)
         super().close()

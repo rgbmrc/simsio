@@ -12,14 +12,14 @@
  par    | params   | I/O | txt | options used by routines and classes
  dat    | data     | I/O | bin | any persistent object, all the above included
  cfg    | config   | I   | txt | subset of par provided as user input
- assets | assets   | I/O | txt | registry of the extra assets this sim owns
+ meta   | metadata | I/O | txt | simsio's own record: uuid, vcs, cpu_time, assets
 
 A handler whose path template contains ``$key`` (e.g. ``dat``) declares an *asset
 family* rather than a single storage: it is not linked at construction, but serves
-as the template ``link`` draws on for extra keys. The ``assets`` registry records
-those links (handler name and serializer, never a resolved path) so that reopening
-the simulation re-links them: `.simsiorc` owns *where* an asset lives, the registry
-owns *how* it is encoded.
+as the template ``link`` draws on for extra keys. The ``assets`` section of ``meta``
+records those links (handler name and serializer, never a resolved path) so that
+reopening the simulation re-links them: `.simsiorc` owns *where* an asset lives, the
+registry owns *how* it is encoded.
 
 """
 
@@ -36,13 +36,12 @@ from string import Template
 from subprocess import run
 
 import dictdiffer
-import dpath
 from numpy.ma import masked  # numpy dependency :(
 
 from simsio.configs import SimsQuery, cfg_load, cfg_update_uid
 from simsio.iocore import Cache, IOHandler
-from simsio.settings import rc
-from simsio.utils import as_scalar, attr_name, setup_logging
+from simsio.settings import check_rc, rc
+from simsio.utils import as_scalar, attr_name, get_module_attr, setup_logging
 
 __all__ = [
     "Simulation",
@@ -57,7 +56,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-ASSETS = "assets"  # reserved IO key: the per-simulation asset registry
+META = "meta"  # reserved IO key: simsio's own per-simulation record
 sim_registry: dict[str, "Simulation"] = {}
 
 
@@ -115,6 +114,16 @@ def purge_caches(keys=None):
         s.purge_cache(keys)
 
 
+def default_sim_class():
+    """The Simulation class named by `[simulation] class` in the rc (a dotted path).
+
+    Resolved on call, not at import: an extension subclass imports this module.
+    """
+    return get_module_attr(
+        rc.get("simulation", "class", fallback="simsio.simulations.Simulation")
+    )
+
+
 def get_sim(sim_like):
     """Retreives a simulation from the register, building it if not already
     present.
@@ -138,7 +147,7 @@ def get_sim(sim_like):
     if not sim_like or not isinstance(sim_like, str) and isnan(sim_like):
         return
     if sim_like not in sim_registry:
-        sim_registry[sim_like] = Simulation(sim_like)
+        sim_registry[sim_like] = default_sim_class()(sim_like)
         logger.debug("Cached simulation %s", sim_like)
     return sim_registry[sim_like]
 
@@ -176,6 +185,7 @@ class Simulation(Cache):
     """Whether `stash(..., extra=True)` writes; `run_sim` sets it from --save-extras."""
 
     def __init__(self, uid=None, cfg=None, readonly=True):
+        check_rc()
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
         if uid and readonly:
@@ -212,9 +222,13 @@ class Simulation(Cache):
         if readonly and not par:
             self["par"] = cfg
 
-        # merge config & runtime info into params
+        try:
+            self.load(META)
+        except FileNotFoundError:
+            self[META] = {}
+
         if not readonly:
-            cfg["uuid"] = self.uid
+            self._merge("par", cfg)
             versions = {
                 tag: run(
                     shlex.split(cmd),
@@ -222,33 +236,31 @@ class Simulation(Cache):
                     text=True,
                     check=False,  # OPT check?
                 ).stdout.strip()
-                for tag, cmd in rc["versioning"].items()
+                for tag, cmd in (rc["vcs"] if rc.has_section("vcs") else {}).items()
             }
             # empty output, e.g. `printenv` of an unset variable, records nothing
-            cfg["versioning"] = {tag: v for tag, v in versions.items() if v}
-
-            # update params
-            diff = dictdiffer.diff(par, cfg, expand=True)
-            diff = [d for d in diff if "remove" not in d]
-            if diff:
-                dictdiffer.patch(diff, par, in_place=True)
-                msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
-                # pure additions are the normal case (fresh sim, or a new option on a
-                # re-run): only a changed value deserves to stand out in the log
-                changed = any(d[0] != "add" for d in diff)
-                level = logging.WARNING if changed else logging.INFO
-                logger.log(level, "Config changes\n%s\n%s", msg, "=" * 80)
+            vcs = {tag: v for tag, v in versions.items() if v}
+            self._merge(META, {"uuid": self.uid, "vcs": vcs})
 
         # restore the assets registry last: a broken one must not stop par from loading
-        if ASSETS in self.handles:
-            self._restore_assets()
+        self._restore_assets()
+
+    def _merge(self, key, new):
+        """Adds `new` to the stored `key`, logging the differences; removals are ignored."""
+        old = self[key]
+        diff = [d for d in dictdiffer.diff(old, new, expand=True) if "remove" not in d]
+        if diff:
+            dictdiffer.patch(diff, old, in_place=True)
+            msg = "\n".join(" ".join(str(v) for v in d) for d in diff)
+            # pure additions are the normal case (fresh sim, or a new option on a
+            # re-run): only a changed value deserves to stand out in the log
+            changed = any(d[0] != "add" for d in diff)
+            level = logging.WARNING if changed else logging.INFO
+            logger.log(level, "%s changes\n%s\n%s", key, msg, "=" * 80)
 
     def _restore_assets(self):
-        try:
-            prev = self.load(ASSETS, cache=False) or {}
-        except FileNotFoundError:
-            prev = {}
-        self[ASSETS] = prev  # a re-run adds to the record, it does not replace it
+        # a re-run adds to the record, it does not replace it
+        prev = self[META].setdefault("assets", {})
         missing = []
         for key, spec in list(prev.items()):  # link re-registers, i.e. writes into prev
             try:
@@ -265,7 +277,7 @@ class Simulation(Cache):
     @property
     def assets(self):
         """Registry of the extra assets owned: {key: link spec}. Linked, not loaded."""
-        return self.data.get(ASSETS, {})
+        return self.data[META].get("assets", {})
 
     @classmethod
     def from_config(cls, uid, group=None, template=None):
@@ -337,18 +349,12 @@ class Simulation(Cache):
                 self.cache.pop(k, None)
 
     def runtime_info(self, ext_cpu_time=0.0):
-        """Integrates simulation params with runtime info and returns it."""
+        """Accumulates this process's CPU time into `meta`."""
         # TODO: ext_cpu_time ugly (used by extensions.ext_qtea)
-        info = {}
-        # cpu time
-        cpu_time_path = "monitoring/cpu_time"
         delta = time.process_time() - self._cpu_clock
         self._cpu_clock += delta + ext_cpu_time
-        cpu_time = dpath.get(self["par"], cpu_time_path, default=0.0)
-        dpath.new(info, cpu_time_path, cpu_time + delta)
-
-        self["par"] |= info
-        return info
+        meta = self[META]
+        meta["cpu_time"] = meta.get("cpu_time", 0.0) + delta
 
     def link(self, key, via=None, touch=True, **link_kw):
         """Links `key`, resolving it through the `via` handler if it is not one itself.
@@ -369,7 +375,7 @@ class Simulation(Cache):
             raise ValueError(f"handler {via!r} has no $key: cannot host {key!r}")
         elif Path(key).name != key:  # a separator would escape the family directory
             raise ValueError(f"asset key {key!r} must be a single path component")
-        register = not self.readonly and ASSETS in self.data and key not in handlers
+        register = not self.readonly and key not in handlers
         h = Template(tpl).substitute(uid=self.uid, key=key)
         rc_link_kw = dict(
             zip(
@@ -393,7 +399,7 @@ class Simulation(Cache):
         # registry owns encoding, so an asset stays readable if that default changes
         spec |= {"serializer": attr_name(self.handles[key].serializer)}
         # bypass __getitem__/setdefault: both would attempt a load
-        self.data[ASSETS][key] = spec
+        self.data[META]["assets"][key] = spec
         logger.debug("Registered asset %s via %s", key, spec["via"])
 
     def unlink(self, key):
@@ -416,10 +422,7 @@ class Simulation(Cache):
         if key not in self.handles or link_kw:
             self.link(key, **link_kw)
         self[key] = val
-        keyvals = {key: val}
-        if ASSETS in self.handles:
-            keyvals[ASSETS] = self.assets
-        IOHandler.dump(self, **keyvals)
+        IOHandler.dump(self, **{key: val, META: self[META]})
         del self[key]
         return self.handles[key].storage
 

@@ -13,7 +13,7 @@ from ctypes.util import find_library
 import numpy as np
 
 from simsio import rc
-from simsio.simulations import Simulation
+from simsio.simulations import Simulation, default_sim_class
 from simsio.utils import get_module_attr
 
 __all__ = ["run_sim", "set_num_threads"]
@@ -77,8 +77,7 @@ def append_measures(measures, results, target=None):
 
 
 @contextmanager
-def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
-    # TODO: sim_class in rc
+def run_sim(sim_class=None, not_found_ok=True, **sim_kwargs):
     delim = sys.argv.index(ARG_DELIM) if ARG_DELIM in sys.argv else len(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument("group", type=str, help="group match pattern")
@@ -91,7 +90,9 @@ def run_sim(sim_class=Simulation, not_found_ok=True, **sim_kwargs):
     )
     args = parser.parse_args(args=sys.argv[1:delim])
     set_num_threads(args.ncores)
-    if isinstance(sim_class, str):
+    if sim_class is None:
+        sim_class = default_sim_class()
+    elif isinstance(sim_class, str):
         sim_class = get_module_attr(sim_class)
     # sim_kwargs.setdefault("readonly", False)  # NOTE should we allow readonly from_config?
     try:

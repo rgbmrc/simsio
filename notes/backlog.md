@@ -34,11 +34,16 @@ usually carry the same marker.
 - 🩹 `IOHandler.dump` renames each storage to `.bak` before writing, so a concurrent
   reader can see the file missing for a moment (opens as `{}`/`FileNotFoundError`).
   Pre-existing for `par`/`res`; the assets registry inherits it.
-- 🩹 `extensions.ext_tenpy.TeNPySimulation.close` reads `self.par`, which does not
-  exist (it is `self["par"]`); the `AttributeError` is swallowed, so `warn_unused`
-  has never fired from there. Fixing the typo needs
-  `par.touch("uuid", "versioning", "monitoring")` in the same commit, or it warns
-  about simsio's own bookkeeping keys on every run.
+- ✅ `extensions.ext_tenpy.TeNPySimulation` now owns the `Config`: `par` is cast to one
+  after the cfg merge, only when writable (`TeNPyYAMLSerializer.load` no longer wraps,
+  so read-only/analysis `par` is a plain dict and `Config.__del__` cannot warn about
+  unread keys there). `close` reports unused options deterministically. simsio's own
+  `uuid`/`vcs`/`cpu_time` live in the `meta` handler, not in `par`, so neither core nor
+  the backend has to special-case them. The class is selected by `[simulation] class`
+  in the rc.
+- 💡 `meta` keeps only the latest `vcs` (a changed value is logged as a WARNING at
+  open). A `runs` list (revision, snapshot, host, timestamps, cpu_time per run) would
+  keep the full provenance of a restarted simulation.
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
@@ -47,7 +52,6 @@ usually carry the same marker.
   (e.g. `umps-tests` lacks `uuid_regex`, `template`, `unsafe_update`).
 - 💡 `sim_to_uid`, `uid_to_sim` (like `group_to_path` and vice versa).
 - 💡 allow specifying a config path instead of a group name (especially in `run_sim`).
-- 💡 `sim_class` configurable from `.simsiorc` (`TODO` in `runsim.run_sim`).
 - 💡 `runtime_info(ext_cpu_time=...)` is an ugly hook for `ext_qtea`; find a cleaner
   accounting mechanism.
 - 💡 deprecate the `path=` override in `Simulation.link`: it is the only remaining
@@ -62,8 +66,9 @@ usually carry the same marker.
 - ✅ discarded, because `sim["par"].subconfig("dmrg2")` at the use site is enough:
   promoting the whole `par` tree to tenpy `Config`s in
   `ext_tenpy.TeNPyYAMLSerializer.load`, so that every section reaches the algorithm
-  that consumes it with logging and unused-option tracking attached. `load` already
-  guarantees the *root* is a `Config`, which is all `subconfig` needs; a section is
+  that consumes it with logging and unused-option tracking attached. A writable
+  `TeNPySimulation` already makes the *root* a `Config` (cast after the merge, so
+  obstacle ii below no longer touches the root), which is all `subconfig` needs; a section is
   then promoted once, on demand, and stored back into `par`. Revisit only if a
   backend needs a rich `par` that a plain-dict merge cannot produce — three obstacles
   found while trying. (i) The config merge in `Simulation.__init__` grafts raw `cfg`
@@ -103,7 +108,7 @@ usually carry the same marker.
 
 ## vcs
 
-`python -m simsio.vcs`, the per-launch snapshot recorded as `versioning.git_snapshot`.
+`python -m simsio.vcs`, the per-launch snapshot recorded as `vcs.git_snapshot`.
 
 - 💡 drift check: at sim start, rebuild the worktree tree in a temp index (no commit or ref) and warn in `info.log` if it differs from the snapshot's tree, flagging sims that `xargs` started after a mid-batch edit. Trees must be compared per repo, because submodule snapshot commits differ by timestamp. Noisy, since harmless edits (e.g. analysis scripts) also trip it.
 - 🩹 a nested non-submodule repo (e.g. `resources/manuel-notes/`) goes in as a bare gitlink to its HEAD: its dirty state is lost and the commit may not be fetchable. git's "embedded repository" warning is captured and discarded.

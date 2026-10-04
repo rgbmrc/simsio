@@ -11,6 +11,12 @@ rc = ConfigParser(interpolation=None)
 rc.read(RC_FILE)
 
 
+def check_rc():
+    """Raises ValueError if the rc lacks what every simulation needs."""
+    if "meta" not in rc["IO-handlers"]:
+        raise ValueError("the rc needs a `meta` entry in [IO-handlers]")
+
+
 @contextmanager
 def rc_context(filenames, reset: None | bool = None):
     with NamedTemporaryFile("w+") as f:
