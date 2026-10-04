@@ -169,11 +169,11 @@ t0 = meta["cpu_time"]
 again2 = Simulation(uid, {}, readonly=False)
 again2.dump()
 assert again2["meta"]["cpu_time"] > t0 and "gs" in again2.assets
-# an rc without meta cannot open a writable sim, loudly
+# an rc without meta cannot open a simulation, loudly (readonly included)
 with rc_context(str(Path(tempfile.mkdtemp()) / "none"), reset=False):
     rc.remove_option("IO-handlers", "meta")
     try:
-        Simulation(None, {}, readonly=False)
+        Simulation(uid)
     except ValueError as e:
         print("no meta ->", e)
     else:

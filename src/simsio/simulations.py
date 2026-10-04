@@ -185,6 +185,11 @@ class Simulation(Cache):
     """Whether `stash(..., extra=True)` writes; `run_sim` sets it from --save-extras."""
 
     def __init__(self, uid=None, cfg=None, readonly=True):
+        if META not in rc["IO-handlers"] or "vcs" not in rc:
+            raise ValueError(
+                "the rc needs a `meta` entry in [IO-handlers] and a [vcs] section "
+                "(they replace `assets` and [versioning])"
+            )
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
         if uid and readonly:
@@ -211,12 +216,6 @@ class Simulation(Cache):
             setup_logging(self.handles["log"].storage)
             logger.info("Running %s", shlex.join(sys.argv))
 
-        if not readonly and (META not in self.handles or "vcs" not in rc):
-            raise ValueError(
-                "writable simulations need a `meta` entry in [IO-handlers] and a [vcs] "
-                "section in the rc (they replace `assets` and [versioning])"
-            )
-
         # handle readonly uninitiazlized simulation
         try:
             par = self.load("par")
@@ -227,11 +226,10 @@ class Simulation(Cache):
         if readonly and not par:
             self["par"] = cfg
 
-        if META in self.handles:  # absent in an rc predating it: readonly only
-            try:
-                self.load(META)
-            except FileNotFoundError:
-                self[META] = {}
+        try:
+            self.load(META)
+        except FileNotFoundError:
+            self[META] = {}
 
         if not readonly:
             self._merge("par", cfg)
@@ -249,8 +247,7 @@ class Simulation(Cache):
             self._merge(META, {"uuid": self.uid, "vcs": vcs})
 
         # restore the assets registry last: a broken one must not stop par from loading
-        if META in self.handles:
-            self._restore_assets()
+        self._restore_assets()
 
     def _merge(self, key, new):
         """Adds `new` to the stored `key`, logging the differences; removals are ignored."""
@@ -284,7 +281,7 @@ class Simulation(Cache):
     @property
     def assets(self):
         """Registry of the extra assets owned: {key: link spec}. Linked, not loaded."""
-        return self.data.get(META, {}).get("assets", {})
+        return self.data[META].get("assets", {})
 
     @classmethod
     def from_config(cls, uid, group=None, template=None):
@@ -429,10 +426,7 @@ class Simulation(Cache):
         if key not in self.handles or link_kw:
             self.link(key, **link_kw)
         self[key] = val
-        keyvals = {key: val}
-        if META in self.handles:
-            keyvals[META] = self[META]
-        IOHandler.dump(self, **keyvals)
+        IOHandler.dump(self, **{key: val, META: self[META]})
         del self[key]
         return self.handles[key].storage
 

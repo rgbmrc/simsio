@@ -68,9 +68,8 @@ not "simplify" them away:
 - **Union, never prune.** A re-run adds to the record; missing files are warned about
   once at open. Nothing is deleted implicitly (`unlink` is the explicit way).
 
-A writable simulation needs a `meta` handler and a `[vcs]` section in the rc and raises
-without them; a readonly one tolerates their absence (no registry, nothing re-linked).
-There is no migration for simulations written before `meta` existed: rerun them.
+Every simulation, readonly included, needs a `meta` handler and a `[vcs]` section in the
+rc and raises without them. There is no migration for simulations written before `meta` existed: rerun them.
 
 ## Branches
 
