@@ -344,7 +344,9 @@ class Simulation(Cache):
         cpu_time_path = "monitoring/cpu_time"
         delta = time.process_time() - self._cpu_clock
         self._cpu_clock += delta + ext_cpu_time
-        cpu_time = dpath.get(self["par"], cpu_time_path, default=0.0)
+        # not dpath.get: it walks (reads) the whole tree, which defeats the usage
+        # tracking of a tenpy Config par
+        cpu_time = self["par"].get("monitoring", {}).get("cpu_time", 0.0)
         dpath.new(info, cpu_time_path, cpu_time + delta)
 
         self["par"] |= info
