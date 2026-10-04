@@ -40,8 +40,7 @@ usually carry the same marker.
   unread keys there). `close` reports unused options deterministically, after touching
   simsio's own `uuid`/`versioning`/`monitoring`. `Simulation.runtime_info` no longer uses
   `dpath.get` on `par`: it walked the tree and read every value, marking all options
-  used at each `dump`. Run scripts need `sim_class=TeNPySimulation` (see the 💡 on
-  `sim_class` in rc, which would also let `get_sim` pick it).
+  used at each `dump`. The class is selected by `[simulation] class` in the rc.
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
@@ -50,7 +49,6 @@ usually carry the same marker.
   (e.g. `umps-tests` lacks `uuid_regex`, `template`, `unsafe_update`).
 - 💡 `sim_to_uid`, `uid_to_sim` (like `group_to_path` and vice versa).
 - 💡 allow specifying a config path instead of a group name (especially in `run_sim`).
-- 💡 `sim_class` configurable from `.simsiorc` (`TODO` in `runsim.run_sim`).
 - 💡 `runtime_info(ext_cpu_time=...)` is an ugly hook for `ext_qtea`; find a cleaner
   accounting mechanism.
 - 💡 deprecate the `path=` override in `Simulation.link`: it is the only remaining

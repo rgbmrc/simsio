@@ -42,7 +42,7 @@ from numpy.ma import masked  # numpy dependency :(
 from simsio.configs import SimsQuery, cfg_load, cfg_update_uid
 from simsio.iocore import Cache, IOHandler
 from simsio.settings import rc
-from simsio.utils import as_scalar, attr_name, setup_logging
+from simsio.utils import as_scalar, attr_name, get_module_attr, setup_logging
 
 __all__ = [
     "Simulation",
@@ -115,6 +115,16 @@ def purge_caches(keys=None):
         s.purge_cache(keys)
 
 
+def default_sim_class():
+    """The Simulation class named by `[simulation] class` in the rc (a dotted path).
+
+    Resolved on call, not at import: an extension subclass imports this module.
+    """
+    return get_module_attr(
+        rc.get("simulation", "class", fallback="simsio.simulations.Simulation")
+    )
+
+
 def get_sim(sim_like):
     """Retreives a simulation from the register, building it if not already
     present.
@@ -138,7 +148,7 @@ def get_sim(sim_like):
     if not sim_like or not isinstance(sim_like, str) and isnan(sim_like):
         return
     if sim_like not in sim_registry:
-        sim_registry[sim_like] = Simulation(sim_like)
+        sim_registry[sim_like] = default_sim_class()(sim_like)
         logger.debug("Cached simulation %s", sim_like)
     return sim_registry[sim_like]
 

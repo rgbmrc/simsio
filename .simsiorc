@@ -7,6 +7,9 @@ log = out/$uid,  , simsio.serializers.LogSerializer
 par = out/$uid, w, simsio.serializers.YAMLSerializer
 res = out/$uid, w, simsio.serializers.NPZSerializer
 
+[simulation]
+class = simsio.simulations.Simulation
+
 [configs]
 directory = configs
 header_tag = ===
