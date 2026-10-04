@@ -5,8 +5,8 @@ tracked and untracked (non-ignored) files alike. It is built in a temporary copy
 the index and anchored by ``refs/simsio/<label>-<timestamp>``, so HEAD, branches and
 the user's staging area are untouched; a clean tree yields HEAD and no ref. Launch
 scripts export it as ``SIMSIO_SNAPSHOT``, which writable simulations record as
-``versioning.git_snapshot`` through the rc entry
-``[versioning] git_snapshot = printenv SIMSIO_SNAPSHOT``::
+``vcs.git_snapshot`` through the rc entry
+``[vcs] git_snapshot = printenv SIMSIO_SNAPSHOT``::
 
     SIMSIO_SNAPSHOT=$(python -m simsio.vcs "$(basename "$0" .sh)") || exit
     export SIMSIO_SNAPSHOT  # separate line: https://www.shellcheck.net/wiki/SC2155
@@ -17,7 +17,7 @@ To push snapshot refs::
     git push origin 'refs/simsio/*:refs/simsio/*'
 
 Beware: this uploads every untracked file the snapshots captured, each up to
-``[versioning.snapshot] max_untracked`` in size, and the remote keeps them for good.
+``[vcs.snapshot] max_untracked`` in size, and the remote keeps them for good.
 
 """
 
@@ -59,7 +59,7 @@ def snapshot(path=".", label="", stamp=None, max_untracked=None):
     """Snapshot the worktree at `path` (submodules first), returning a commit sha.
 
     Untracked files larger than `max_untracked` bytes are skipped with a warning
-    (default from ``[versioning.snapshot] max_untracked`` in the rc, else 10M). Returns None
+    (default from ``[vcs.snapshot] max_untracked`` in the rc, else 10M). Returns None
     outside a git repository.
     """
     try:
@@ -69,9 +69,7 @@ def snapshot(path=".", label="", stamp=None, max_untracked=None):
         return None
     stamp = stamp or time.strftime("%Y%m%dT%H%M%S")
     if max_untracked is None:
-        max_untracked = _size(
-            rc.get("versioning.snapshot", "max_untracked", fallback="10M")
-        )
+        max_untracked = _size(rc.get("vcs.snapshot", "max_untracked", fallback="10M"))
     gitlinks = {
         sub: snapshot(top / sub, label, stamp, max_untracked)
         for line in _git(top, "ls-files", "-s").splitlines()

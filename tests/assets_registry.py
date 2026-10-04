@@ -1,6 +1,6 @@
 # %%
 # ruff: noqa: B018
-"""Interactive tour of simsio's per-simulation asset registry (branch core/assets).
+"""Interactive tour of simsio's per-simulation asset registry (the ``assets`` section of ``meta``).
 
 Writable sims are built directly, not through ``run_sim``: ``Simulation(None, {},
 readonly=False)`` mints a uuid and links the rc handles without touching a config,
@@ -8,7 +8,7 @@ so there is no config entry to clean up afterwards -- only the output dirs, whic
 the last cell removes. Nothing here reads or writes an existing simulation.
 
 Runs under this package's own .simsiorc (lib/simsio/.simsiorc), not a host
-project's: non-keyed handlers (assets/log/par/res) resolve to flat siblings
+project's: non-keyed handlers (log/meta/par/res) resolve to flat siblings
 `out/$uid.<ext>`, only `aux`/`dat` are per-uid directories.
 """
 
@@ -24,6 +24,7 @@ from simsio import *
 from simsio import purge_caches, purge_registry
 from simsio.analysis.quantities import Measure
 from simsio.serializers import JSONSerializer
+from simsio.settings import rc
 
 made = []  # uids to purge in the last cell
 
@@ -61,7 +62,7 @@ sim.stash("exc_k0_n0", {"k": 0.0}, via="dat")
 sim.dump()
 
 print(tree(uid))
-print(Path(f"out/{uid}.json").read_text())
+print(Path(f"out/{uid}.json").read_text())  # meta: uuid, vcs, cpu_time, assets
 # endregion
 
 # %%
@@ -127,13 +128,13 @@ gone
 # assemble a rc#1-style results/$uid/ tree from our flat/split rc#2 layout, no data/
 share = Path(tempfile.mkdtemp())
 (share / "results" / uid).mkdir(parents=True)
-shutil.copy(f"out/{uid}.json", share / "results" / uid / "assets.json")
+shutil.copy(f"out/{uid}.json", share / "results" / uid / "meta.json")
 shutil.copy(f"out/{uid}/dmrg2.npz", share / "results" / uid / "dmrg2.npz")
 (share / ".simsiorc").write_text(f"""[IO-handlers]
-assets = {share}/results/$uid/assets, w, simsio.serializers.JSONSerializer
 aux = {share}/results/$uid/$key, w, simsio.serializers.NPZSerializer
 dat = {share}/elsewhere/$uid/$key, w, simsio.serializers.PickleSerializer
 log = {share}/results/$uid/info,  , simsio.serializers.LogSerializer
+meta = {share}/results/$uid/meta, w, simsio.serializers.JSONSerializer
 par = {share}/results/$uid/params, w, simsio.extensions.ext_tenpy.TeNPyYAMLSerializer
 res = {share}/results/$uid/measures, w, simsio.serializers.NPZSerializer
 """)
@@ -150,6 +151,33 @@ with rc_context(str(share / ".simsiorc")):
 purge_registry()
 shutil.rmtree(share)
 guest
+# endregion
+
+# %%
+# region meta is simsio's own record: par stays what determines the result
+import json
+
+meta = json.loads(Path(f"out/{uid}.json").read_text())
+print({k: (v if k != "assets" else list(v)) for k, v in meta.items()})
+assert set(meta) == {"uuid", "vcs", "cpu_time", "assets"}, set(meta)
+par = Path(f"out/{uid}.yaml").read_text()
+assert not {"uuid", "vcs", "versioning", "monitoring", "cpu_time"} & set(par.split()), (
+    par
+)
+# a re-run accumulates cpu_time and keeps the registry
+t0 = meta["cpu_time"]
+again2 = Simulation(uid, {}, readonly=False)
+again2.dump()
+assert again2["meta"]["cpu_time"] > t0 and "gs" in again2.assets
+# an rc without meta cannot open a writable sim, loudly
+with rc_context(str(Path(tempfile.mkdtemp()) / "none"), reset=False):
+    rc.remove_option("IO-handlers", "meta")
+    try:
+        Simulation(None, {}, readonly=False)
+    except ValueError as e:
+        print("no meta ->", e)
+    else:
+        raise AssertionError("expected ValueError")
 # endregion
 
 # %%

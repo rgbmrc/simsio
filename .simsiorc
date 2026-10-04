@@ -1,9 +1,9 @@
 [IO-handlers]
 # $key templates declare asset families, resolved on demand by Simulation.link
-assets = out/$uid, w, simsio.serializers.JSONSerializer
 aux = out/$uid/$key, w, simsio.serializers.NPZSerializer
 dat = data/$uid/$key, w, simsio.serializers.PickleSerializer
 log = out/$uid,  , simsio.serializers.LogSerializer
+meta = out/$uid, w, simsio.serializers.JSONSerializer
 par = out/$uid, w, simsio.serializers.YAMLSerializer
 res = out/$uid, w, simsio.serializers.NPZSerializer
 
@@ -18,11 +18,11 @@ uuid_regex = [a-z0-9]{32}
 template = false
 unsafe_update = true
 
-[versioning]
+[vcs]
 git_revision = git rev-parse HEAD
 git_snapshot = printenv SIMSIO_SNAPSHOT
 
-[versioning.snapshot]
+[vcs.snapshot]
 max_untracked = 10M # untracked files above this size are left out of snapshots
 
 [logging-format]

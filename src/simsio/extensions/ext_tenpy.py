@@ -33,7 +33,5 @@ class TeNPySimulation(Simulation):
 
     def close(self):
         if not self.readonly:
-            par = self["par"]
-            par.touch("uuid", "versioning", "monitoring")  # simsio's own bookkeeping
-            par.warn_unused(recursive=True)
+            self["par"].warn_unused(recursive=True)
         super().close()

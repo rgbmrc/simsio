@@ -37,10 +37,13 @@ usually carry the same marker.
 - ✅ `extensions.ext_tenpy.TeNPySimulation` now owns the `Config`: `par` is cast to one
   after the cfg merge, only when writable (`TeNPyYAMLSerializer.load` no longer wraps,
   so read-only/analysis `par` is a plain dict and `Config.__del__` cannot warn about
-  unread keys there). `close` reports unused options deterministically, after touching
-  simsio's own `uuid`/`versioning`/`monitoring`. `Simulation.runtime_info` no longer uses
-  `dpath.get` on `par`: it walked the tree and read every value, marking all options
-  used at each `dump`. The class is selected by `[simulation] class` in the rc.
+  unread keys there). `close` reports unused options deterministically. simsio's own
+  `uuid`/`vcs`/`cpu_time` live in the `meta` handler, not in `par`, so neither core nor
+  the backend has to special-case them. The class is selected by `[simulation] class`
+  in the rc.
+- 💡 `meta` keeps only the latest `vcs` (a changed value is logged as a WARNING at
+  open). A `runs` list (revision, snapshot, host, timestamps, cpu_time per run) would
+  keep the full provenance of a restarted simulation.
 - 🚧 `configs._config_path_history` should be backed by `HISTORY_FILE`
   (`.simsio_history`), currently an in-process deque only.
 - 🚧 the default `.simsiorc` is not deployed, so `configs.SimsQuery` carries a
@@ -105,7 +108,7 @@ usually carry the same marker.
 
 ## vcs
 
-`python -m simsio.vcs`, the per-launch snapshot recorded as `versioning.git_snapshot`.
+`python -m simsio.vcs`, the per-launch snapshot recorded as `vcs.git_snapshot`.
 
 - 💡 drift check: at sim start, rebuild the worktree tree in a temp index (no commit or ref) and warn in `info.log` if it differs from the snapshot's tree, flagging sims that `xargs` started after a mid-batch edit. Trees must be compared per repo, because submodule snapshot commits differ by timestamp. Noisy, since harmless edits (e.g. analysis scripts) also trip it.
 - 🩹 a nested non-submodule repo (e.g. `resources/manuel-notes/`) goes in as a bare gitlink to its HEAD: its dirty state is lost and the commit may not be fetchable. git's "embedded repository" warning is captured and discarded.
