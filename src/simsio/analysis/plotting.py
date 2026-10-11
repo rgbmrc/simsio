@@ -739,10 +739,16 @@ def _set_index_ticks(axis: mpl.axis.Axis, vals, obs):
 
     The image is drawn in index space (imshow cannot do non-linear coords), so the
     locator and formatter are borrowed from a throwaway axes of the same size, with
-    `obs.scale` and `obs.axis_kwds`. Its ticks are placed at their fractional index,
-    interpolating in scaled coordinates between neighbouring `vals`, unless they are
-    no sparser than `vals` themselves (or these are not monotonic): then every value
-    is ticked, as a locator would invent values that were never computed.
+    `obs.scale` and `obs.axis_kwds`. If `vals` fit the axis' tick space (or are not
+    monotonic), every one is ticked: one tick per pixel, whatever their spacing.
+    Otherwise, or if `axis_kwds` sets a `major_locator`, the locator's ticks are
+    placed at their fractional index, interpolating in scaled coordinates between
+    neighbouring `vals`.
+
+    That is exact only if `vals` are evenly spaced in `obs.scale`. Dense *uneven*
+    `vals` get ticks bunched where the data are sparse, as the locator sizes its
+    ticks for an affine axis, and labels may overlap. Pick a scale in which they are
+    even, or tick indices (`MaxNLocator(integer=True)`) labelled by `vals` instead.
     """
     name = axis.axis_name
     w, h = axis.axes.bbox.size / axis.figure.dpi
@@ -763,7 +769,8 @@ def _set_index_ticks(axis: mpl.axis.Axis, vals, obs):
             st = trans.transform(loc)
             eps = 1e-6 * (s[-1] - s[0])
             keep = (st >= s[0] - eps) & (st <= s[-1] + eps)
-            if keep.sum() < len(vals):
+            explicit = "major_locator" in getattr(obs, "axis_kwds", {})
+            if explicit or len(vals) > tmp_axis.get_tick_space():
                 ticks, pos = loc[keep], np.interp(st[keep], s, idx)
     fmt = tmp_axis.get_major_formatter()
     axis.set_ticks(pos)
