@@ -724,5 +724,56 @@ def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
     except ValueError:
         logger.warning(f"Could not set image {axis.axis_name}-ticks")
     else:
-        axis.set_ticks(np.arange(len(vals)))
-        axis.set_ticklabels([f"${v}$" for v in vals])
+        apply_obs_props(axis, obs, "axis_kwds")
+        try:
+            vals = np.asarray(vals, dtype=float)
+        except (TypeError, ValueError):
+            axis.set_ticks(np.arange(len(vals)))
+            axis.set_ticklabels([f"${v}$" for v in vals])
+        else:
+            _set_index_ticks(axis, vals, obs)
+
+
+def _set_index_ticks(axis: mpl.axis.Axis, vals, obs):
+    """Tick an image index axis as a plain axis spanning `vals` would be ticked.
+
+    The image is drawn in index space (imshow cannot do non-linear coords), so the
+    locator and formatter are borrowed from a throwaway axes of the same size, with
+    `obs.scale` and `obs.axis_kwds`. If `vals` fit the axis' tick space (or are not
+    monotonic), every one is ticked: one tick per pixel, whatever their spacing.
+    Otherwise, or if `axis_kwds` sets a `major_locator`, the locator's ticks are
+    placed at their fractional index, interpolating in scaled coordinates between
+    neighbouring `vals`.
+
+    That is exact only if `vals` are evenly spaced in `obs.scale`. Dense *uneven*
+    `vals` get ticks bunched where the data are sparse, as the locator sizes its
+    ticks for an affine axis, and labels may overlap. Pick a scale in which they are
+    even, or tick indices (`MaxNLocator(integer=True)`) labelled by `vals` instead.
+    """
+    name = axis.axis_name
+    w, h = axis.axes.bbox.size / axis.figure.dpi
+    tmp = mpl.figure.Figure(figsize=(w, h)).add_axes((0, 0, 1, 1))
+    getattr(tmp, f"set_{name}scale")(getattr(obs, "scale", "linear"))
+    tmp_axis = getattr(tmp, f"{name}axis")
+    apply_obs_props(tmp_axis, obs, "axis_kwds")
+    idx = np.arange(len(vals))
+    ticks, pos = vals, idx
+    if len(vals) > 1:
+        getattr(tmp, f"set_{name}lim")(vals.min(), vals.max())
+        trans = tmp_axis.get_transform()
+        s = trans.transform(vals)
+        if np.all(np.diff(s) < 0):
+            s, idx = s[::-1], idx[::-1]
+        if np.all(np.diff(s) > 0):
+            loc = tmp_axis.get_majorticklocs()
+            st = trans.transform(loc)
+            eps = 1e-6 * (s[-1] - s[0])
+            keep = (st >= s[0] - eps) & (st <= s[-1] + eps)
+            explicit = "major_locator" in getattr(obs, "axis_kwds", {})
+            if explicit or len(vals) > tmp_axis.get_tick_space():
+                ticks, pos = loc[keep], np.interp(st[keep], s, idx)
+    fmt = tmp_axis.get_major_formatter()
+    axis.set_ticks(pos)
+    axis.set_ticklabels(fmt.format_ticks(ticks))
+    axis.get_major_formatter().set_offset_string(fmt.get_offset())
+    axis.set_minor_locator(ticker.NullLocator())
