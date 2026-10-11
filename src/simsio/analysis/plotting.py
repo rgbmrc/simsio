@@ -724,5 +724,42 @@ def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
     except ValueError:
         logger.warning(f"Could not set image {axis.axis_name}-ticks")
     else:
-        axis.set_ticks(np.arange(len(vals)))
-        axis.set_ticklabels([f"${v}$" for v in vals])
+        scale = getattr(obs, "scale", "linear")
+        if scale == "linear" or not _set_scaled_index_ticks(axis, vals, scale):
+            axis.set_ticks(np.arange(len(vals)))
+            axis.set_ticklabels([f"${v}$" for v in vals])
+
+
+def _set_scaled_index_ticks(axis: mpl.axis.Axis, vals, scale) -> bool:
+    """Tick an image index axis where a `scale` axis spanning `vals` would.
+
+    The image is drawn in index space (imshow cannot do non-linear coords), so the
+    scale's own locator and formatter are borrowed from a throwaway axes of the same
+    size, and the ticks placed at their fractional index, interpolating linearly in
+    scaled coordinates between neighbouring `vals`. Returns False if `vals` are not
+    strictly monotonic in scaled coordinates.
+    """
+    if len(vals) < 2:
+        return False
+    name = axis.axis_name
+    w, h = axis.axes.bbox.size / axis.figure.dpi
+    tmp = mpl.figure.Figure(figsize=(w, h)).add_axes((0, 0, 1, 1))
+    getattr(tmp, f"set_{name}scale")(scale)
+    getattr(tmp, f"set_{name}lim")(min(vals), max(vals))
+    tmp_axis = getattr(tmp, f"{name}axis")
+    trans = tmp_axis.get_transform()
+    s = trans.transform(np.asarray(vals, dtype=float))
+    idx = np.arange(len(vals))
+    if not (np.all(np.diff(s) > 0) or np.all(np.diff(s) < 0)):
+        return False
+    if s[0] > s[-1]:
+        s, idx = s[::-1], idx[::-1]
+    ticks = tmp_axis.get_majorticklocs()
+    st = trans.transform(ticks)
+    eps = 1e-6 * (s[-1] - s[0])
+    keep = (st >= s[0] - eps) & (st <= s[-1] + eps)
+    ticks, st = ticks[keep], st[keep]
+    axis.set_ticks(np.interp(st, s, idx))
+    axis.set_ticklabels(tmp_axis.get_major_formatter().format_ticks(ticks))
+    axis.set_minor_locator(ticker.NullLocator())
+    return True
