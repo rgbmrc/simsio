@@ -214,6 +214,12 @@ usually carry the same marker.
 - 🚧 `grid_from_obs` is a sketch raising `NotImplementedError`; would give
   `report_2d` real (non-index) image extents. Note `imshow` cannot handle
   non-linear coords — needs `pcolormesh` for the general case.
+  Meanwhile `_set_index_ticks` borrows the obs's scale + `axis_kwds` locator and
+  formatter from a hidden axes and interpolates the ticks into index space.
+- 🩹 `axis_kwds` holding a `Locator`/`Formatter` *instance* shares it across every
+  tile `plot_1d_data` applies it to, and mpl rebinds `locator.axis` on each
+  `set_major_locator`: tiles with unshared, different limits all tick from the last
+  one's view interval. Fix by copying (as is done for `norm`) before `plt.setp`.
 - 💡 **layout backend**: `AxesGrid` gives fixed-size tiles but pads them blindly, so
   whatever reaches into the gaps is measured by hand (`fit_axes_pad`: one
   `get_tightbbox` pass, so it goes stale if the caller reformats the axes

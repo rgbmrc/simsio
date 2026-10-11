@@ -724,42 +724,49 @@ def annotate_image_axis(axis: mpl.axis.Axis, obs: None | Function, u: str):
     except ValueError:
         logger.warning(f"Could not set image {axis.axis_name}-ticks")
     else:
-        scale = getattr(obs, "scale", "linear")
-        if scale == "linear" or not _set_scaled_index_ticks(axis, vals, scale):
+        apply_obs_props(axis, obs, "axis_kwds")
+        try:
+            vals = np.asarray(vals, dtype=float)
+        except (TypeError, ValueError):
             axis.set_ticks(np.arange(len(vals)))
             axis.set_ticklabels([f"${v}$" for v in vals])
+        else:
+            _set_index_ticks(axis, vals, obs)
 
 
-def _set_scaled_index_ticks(axis: mpl.axis.Axis, vals, scale) -> bool:
-    """Tick an image index axis where a `scale` axis spanning `vals` would.
+def _set_index_ticks(axis: mpl.axis.Axis, vals, obs):
+    """Tick an image index axis as a plain axis spanning `vals` would be ticked.
 
     The image is drawn in index space (imshow cannot do non-linear coords), so the
-    scale's own locator and formatter are borrowed from a throwaway axes of the same
-    size, and the ticks placed at their fractional index, interpolating linearly in
-    scaled coordinates between neighbouring `vals`. Returns False if `vals` are not
-    strictly monotonic in scaled coordinates.
+    locator and formatter are borrowed from a throwaway axes of the same size, with
+    `obs.scale` and `obs.axis_kwds`. Its ticks are placed at their fractional index,
+    interpolating in scaled coordinates between neighbouring `vals`, unless they are
+    no sparser than `vals` themselves (or these are not monotonic): then every value
+    is ticked, as a locator would invent values that were never computed.
     """
-    if len(vals) < 2:
-        return False
     name = axis.axis_name
     w, h = axis.axes.bbox.size / axis.figure.dpi
     tmp = mpl.figure.Figure(figsize=(w, h)).add_axes((0, 0, 1, 1))
-    getattr(tmp, f"set_{name}scale")(scale)
-    getattr(tmp, f"set_{name}lim")(min(vals), max(vals))
+    getattr(tmp, f"set_{name}scale")(getattr(obs, "scale", "linear"))
     tmp_axis = getattr(tmp, f"{name}axis")
-    trans = tmp_axis.get_transform()
-    s = trans.transform(np.asarray(vals, dtype=float))
+    apply_obs_props(tmp_axis, obs, "axis_kwds")
     idx = np.arange(len(vals))
-    if not (np.all(np.diff(s) > 0) or np.all(np.diff(s) < 0)):
-        return False
-    if s[0] > s[-1]:
-        s, idx = s[::-1], idx[::-1]
-    ticks = tmp_axis.get_majorticklocs()
-    st = trans.transform(ticks)
-    eps = 1e-6 * (s[-1] - s[0])
-    keep = (st >= s[0] - eps) & (st <= s[-1] + eps)
-    ticks, st = ticks[keep], st[keep]
-    axis.set_ticks(np.interp(st, s, idx))
-    axis.set_ticklabels(tmp_axis.get_major_formatter().format_ticks(ticks))
+    ticks, pos = vals, idx
+    if len(vals) > 1:
+        getattr(tmp, f"set_{name}lim")(vals.min(), vals.max())
+        trans = tmp_axis.get_transform()
+        s = trans.transform(vals)
+        if np.all(np.diff(s) < 0):
+            s, idx = s[::-1], idx[::-1]
+        if np.all(np.diff(s) > 0):
+            loc = tmp_axis.get_majorticklocs()
+            st = trans.transform(loc)
+            eps = 1e-6 * (s[-1] - s[0])
+            keep = (st >= s[0] - eps) & (st <= s[-1] + eps)
+            if keep.sum() < len(vals):
+                ticks, pos = loc[keep], np.interp(st[keep], s, idx)
+    fmt = tmp_axis.get_major_formatter()
+    axis.set_ticks(pos)
+    axis.set_ticklabels(fmt.format_ticks(ticks))
+    axis.get_major_formatter().set_offset_string(fmt.get_offset())
     axis.set_minor_locator(ticker.NullLocator())
-    return True
