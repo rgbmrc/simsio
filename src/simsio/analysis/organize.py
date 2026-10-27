@@ -76,12 +76,18 @@ def uids_grid(sims, keys) -> xr.DataArray:
     return xr.DataArray(grid, coords, tuple(k.name for k in keys), group)
 
 
-def ref_sims(ug: xr.DataArray, **sel) -> Measure:
-    """Measure mapping each sim of `ug` to the one at the coords `sel`, all other
-    coords equal (None if missing or not in `ug`). E.g. `ref_sims(ug, L=6) @ e0`, or
-    `filters.dev_ref`, compare each plot line to a reference one."""
-    ref = ug.sel(sel, drop=True).broadcast_like(ug).transpose(*ug.dims)
-    refs = {s.uid: r for s, r in zip(ug.values.flat, ref.values.flat) if s}
+def ref_sims(ug: xr.DataArray, ref_ug: xr.DataArray | None = None, **sel) -> Measure:
+    """Measure mapping each sim of `ug` to the one of `ref_ug` (default `ug`) at the
+    coords `sel`, all other coords equal (None if missing). E.g.
+    `ref_sims(ug, L=6) @ e0`, or `filters.dev_ref`, compare each plot line to a
+    reference one; a separate `ref_ug` holds references outside the scan."""
+    ref_ug = ug if ref_ug is None else ref_ug
+    ref = ref_ug.sel(sel, drop=True).broadcast_like(ug).transpose(*ug.dims)
+    refs = {
+        s.uid: r if isinstance(r, Simulation) else None
+        for s, r in zip(ug.values.flat, ref.values.flat)
+        if s
+    }
     name = "ref(" + ",".join(f"{k}={v}" for k, v in sel.items()) + ")"
     label = Measure.strings([*map(Measure.get, sel)], vals=sel.values(), junc=",")
     # uncached: refs of equal sel on different grids share the name, hence the key
