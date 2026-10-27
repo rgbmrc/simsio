@@ -541,7 +541,9 @@ class Measure(Function):
         dat_dims = tuple(map((self.name + "[{}]").format, range(dat.ndim - sims.ndim)))
         dat_dims = tuple(map(f"{self.name}[{{}}]".format, range(dat.ndim - sims.ndim)))
         dat_dims = tuple(f"{self.name}[{i}]" for i in range(dat.ndim - sims.ndim))
-        return xr.DataArray(dat, sims.coords, sims.dims + dat_dims)
+        return xr.DataArray(
+            dat, sims.coords, sims.dims + dat_dims, f"{self.name} @ {sims.name}"
+        )
 
     def lazy_operator(self, op, other=None, *, op_fmt=None, swap=False):
         res = super().lazy_operator(op, other, op_fmt=op_fmt, swap=swap)
