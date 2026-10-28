@@ -24,7 +24,9 @@ class IOHandler:
         except AttributeError:
             return p + bak  # p string
 
-    def link(self, key, path, write_mode, serializer, touch=True):
+    @staticmethod
+    def storage(key, path, serializer):
+        """The storage path of `key` and its serializer, instantiated; no side effects."""
         if isinstance(serializer, str):
             if not serializer:
                 msg = f"{key}: handler declares no serializer, pass serializer=..."
@@ -37,7 +39,10 @@ class IOHandler:
         if path.stem != raw.name:
             msg = f"{key}: storage name carries a suffix ({raw.name} -> {path.name})"
             raise ValueError(msg)
+        return path, serializer
 
+    def link(self, key, path, write_mode, serializer, touch=True):
+        path, serializer = self.storage(key, path, serializer)
         if not self.readonly:
             # enusre storge directory exists
             path.parent.mkdir(parents=True, exist_ok=True)

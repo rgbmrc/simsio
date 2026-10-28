@@ -80,9 +80,13 @@ def append_measures(measures, results, target=None):
 def run_sim(sim_class=None, not_found_ok=True, **sim_kwargs):
     delim = sys.argv.index(ARG_DELIM) if ARG_DELIM in sys.argv else len(sys.argv)
     parser = argparse.ArgumentParser()
-    parser.add_argument("group", type=str, help="group match pattern")
     parser.add_argument("uid", type=str, help="unique identifier of the simulation")
     parser.add_argument("ncores", type=int, help="number of CPU cores to use")
+    parser.add_argument(
+        "-g",
+        "--group",
+        help="config group match pattern; without, `uid` runs from its stored par",
+    )
     parser.add_argument(
         "--save-extras",
         action="store_true",
@@ -96,13 +100,17 @@ def run_sim(sim_class=None, not_found_ok=True, **sim_kwargs):
         sim_class = get_module_attr(sim_class)
     # sim_kwargs.setdefault("readonly", False)  # NOTE should we allow readonly from_config?
     try:
-        sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
-    except KeyError as e:  # TODO: custom exception, missing config file or uid?
+        if args.group is None:  # e.g. par generated on another machine
+            sim = sim_class(args.uid, readonly=False)
+            logger.info("Running from the stored par, no config")
+        else:
+            sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
+    # TODO: custom exception, missing config file or uid?
+    except (KeyError, ValueError, FileNotFoundError) as e:
         if not_found_ok:
             logger.error(e.args[0])
             sys.exit()
-        else:
-            raise
+        raise
     sim.ini_args = args
     sim.save_extras = args.save_extras
     sim.run_args = sys.argv[delim + 1 :]

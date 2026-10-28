@@ -65,6 +65,10 @@ not "simplify" them away:
   registry, i.e. `meta`). No write-on-link, so a crash leaves no registration without a file.
 - **No locking**, because `from_config` already renames the config key to `<uuid>~R`
   under an `fcntl` lock — one writer per uid — and readonly opens never write.
+  A run without a group (`run_sim` with no `-g`, i.e. writable `Simulation(uuid)` from
+  its stored par) skips that rename: there one writer per uid is the launcher's job
+  (e.g. one slurm array task per uid). A writable `Simulation` takes `uid=None` (new)
+  or a UUID with a stored par or a `cfg`, and raises before writing anything otherwise.
 - **Union, never prune.** A re-run adds to the record; missing files are warned about
   once at open. Nothing is deleted implicitly (`unlink` is the explicit way).
 

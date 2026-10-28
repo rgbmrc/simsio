@@ -185,9 +185,17 @@ class Simulation(Cache):
     """Whether `stash(..., extra=True)` writes; `run_sim` sets it from --save-extras."""
 
     def __init__(self, uid=None, cfg=None, readonly=True):
+        """Readonly: opens `uid`, whatever it is (a missing one has `cfg` as par).
+
+        Writable: `uid=None` is a new simulation with a fresh UUID; otherwise `uid` must
+        be a UUID with a stored par, or a `cfg` (merged into it); else raises before
+        anything is written.
+        """
         check_rc()
         # init Cache & link rc I/O
         super().__init__(readonly=readonly)
+        if not readonly and uid is not None and valid_uuid(uid) != uid:
+            raise ValueError(f"{uid!r} is not a UUID: uid=None for a new simulation")
         if uid and readonly:
             try:
                 self.uid = uid.rsplit("~", 1)[0]
@@ -197,6 +205,9 @@ class Simulation(Cache):
                 raise TypeError(msg) from e
         else:
             self.uid = valid_uuid(uid)
+        if not (readonly or uid is None or cfg is not None or self._par_stored()):
+            msg = f"Simulation {self.uid} has neither a stored par nor a cfg"
+            raise FileNotFoundError(msg)
         cfg = cfg or {}
         self.cfg_path = None
         self._save_time = None
@@ -283,7 +294,8 @@ class Simulation(Cache):
     def from_config(cls, uid, group=None, template=None):
         # before writing/linking anything get config
         cfg_path, cfg = cfg_load(uid, group)
-        sim = cls(uid, cfg, readonly=False)
+        # a name (n1) is a new simulation, a UUID key reruns that one
+        sim = cls(uid if valid_uuid(uid) == uid else None, cfg, readonly=False)
         sim.cfg_path = cfg_path
         cfg_update_uid(cfg_path, uid, f"{sim.uid}~R", template)
         return sim
@@ -367,7 +379,7 @@ class Simulation(Cache):
         if via and key in handlers:
             raise ValueError(f"IO key {key!r} is reserved")
         via = via or (key if key in handlers else "dat")
-        tpl, keyed = _handler(via)
+        _, keyed = _handler(via)
         if key in handlers:
             if keyed:
                 raise ValueError(f"{key!r} is an asset family, not a storage")
@@ -376,19 +388,22 @@ class Simulation(Cache):
         elif Path(key).name != key:  # a separator would escape the family directory
             raise ValueError(f"asset key {key!r} must be a single path component")
         register = not self.readonly and key not in handlers
-        h = Template(tpl).substitute(uid=self.uid, key=key)
-        rc_link_kw = dict(
-            zip(
-                ("path", "write_mode", "serializer"),
-                (s.strip() for s in h.split(",")),
-            ),
-        )
         # template-resolved paths cannot escape the rc directory (key is a single component)
         # explicit path= could, but only reached in readonly mode (_register rejects it)
-        out = super().link(key, touch=touch, **(rc_link_kw | link_kw))
+        out = super().link(key, touch=touch, **(self._rc_link_kw(key, via) | link_kw))
         if register:
             self._register(key, {"via": via} | link_kw)
         return out
+
+    def _rc_link_kw(self, key, via=None):
+        """`path`, `write_mode`, `serializer` of `key` from the `via` rc handler."""
+        h = Template(_handler(via or key)[0]).substitute(uid=self.uid, key=key)
+        keys = ("path", "write_mode", "serializer")
+        return dict(zip(keys, (s.strip() for s in h.split(","))))
+
+    def _par_stored(self):
+        kw = self._rc_link_kw("par")
+        return self.storage("par", kw["path"], kw["serializer"])[0].is_file()
 
     def _register(self, key, spec):
         if "path" in spec:
