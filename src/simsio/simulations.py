@@ -38,7 +38,7 @@ from subprocess import run
 import dictdiffer
 from numpy.ma import masked  # numpy dependency :(
 
-from simsio.configs import SimsQuery, cfg_load, cfg_update_uid
+from simsio.configs import SimsQuery, cfg_claim, cfg_update_uid
 from simsio.iocore import Cache, IOHandler
 from simsio.settings import check_rc, rc
 from simsio.utils import as_scalar, attr_name, get_module_attr, setup_logging
@@ -292,17 +292,20 @@ class Simulation(Cache):
 
     @classmethod
     def from_config(cls, uid, group=None, template=None):
-        # before writing/linking anything get config
-        cfg_path, cfg = cfg_load(uid, group)
         # a name (n1) is a new simulation, a UUID key reruns that one
-        sim = cls(uid if valid_uuid(uid) == uid else None, cfg, readonly=False)
+        new_uid = uid if valid_uuid(uid) == uid else valid_uuid()
+        # claim the entry before writing anything: a concurrent claim raises KeyError
+        cfg_path, cfg = cfg_claim(uid, f"{new_uid}~R", group, template)
+        sim = cls(new_uid, cfg, readonly=False)
         sim.cfg_path = cfg_path
-        cfg_update_uid(cfg_path, uid, f"{sim.uid}~R", template)
         return sim
 
     def close(self):
         if not self.readonly and self.cfg_path:
-            cfg_update_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
+            try:
+                cfg_update_uid(self.cfg_path, f"{self.uid}~R", self.uid, template=False)
+            except KeyError as e:  # the entry was edited away meanwhile
+                logger.warning(e.args[0])
 
     # prevent numpy from iterating over self, but might be removed:
     # https://numpy.org/devdocs/reference/arrays.interface.html#object.__array_interface__

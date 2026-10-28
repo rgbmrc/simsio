@@ -22,6 +22,7 @@ from simsio.settings import rc
 
 __all__ = [
     "SimsQuery",
+    "cfg_claim",
     "cfg_gen",
     "cfg_glob",
     "cfg_lock",
@@ -125,9 +126,28 @@ def cfg_load(uid, group=None, expand=True):
     while path in _config_path_history:
         _config_path_history.remove(path)
     _config_path_history.appendleft(path)
+    return path, _cfg_entry(cfgs, uid, expand)
+
+
+def _cfg_entry(cfgs, uid, expand=True):
     cfg = cfgs[uid] or {}  # if None then empty dict
     if expand:  # expand config via templates
         _expand(cfg, cfgs.get(rc["configs"]["header_tag"], {}))
+    return cfg
+
+
+def cfg_claim(uid, new_uid, group=None, template=None):
+    """`cfg_load` of `uid` and its rename to `new_uid`, under one exclusive lock: of
+    concurrent claims of the same entry exactly one succeeds, the others raise KeyError.
+    """
+    path, _ = cfg_load(uid, group, expand=False)  # locate it
+    with cfg_lock(path) as f:
+        cfgs = yamlsf.load(f)
+        if not cfgs or uid not in cfgs:
+            raise KeyError(f"Simulation {uid} config already claimed")
+        cfg = _cfg_entry(cfgs, uid)
+        f.seek(0)
+        _rename_uid(f, uid, new_uid, template)
     return path, cfg
 
 
@@ -161,39 +181,52 @@ def cfg_update(f):
 
 
 def cfg_update_uid(path, old_uid, new_uid, template=None):
-    path = Path(path)
+    with cfg_lock(Path(path)) as f:
+        _rename_uid(f, old_uid, new_uid, template)
+
+
+def _rename_uid(f, old_uid, new_uid, template=None):
+    """Renames the key `old_uid` of the locked config `f` (at its start), and its
+    `$old_uid` refs if `template`; KeyError, with `f` untouched, if there is no such key.
+    """
     if template is None:
         template = rc["configs"].getboolean("template")
     ref_uid = new_uid.rstrip("~R")
     map_uid = {old_uid: ref_uid} if template and ref_uid != old_uid else None
-    with cfg_lock(path) as f:
-        # >1e3 times faster on O(1e3) lines
-        if rc["configs"].getboolean("unsafe_update"):
-            old_key = re.compile(rf"^{old_uid}(?=:[^\w])")
-            # tempfile.SpooledTemporaryFile for large configs? no point
-            # because must still fit in memory when loaded as yaml
-            cfg = f.readlines()
-            for i, l in enumerate(cfg):
-                # update uid
-                l = old_key.sub(new_uid, l, 1)
-                # template refs
-                if map_uid:
-                    l = Template(l).safe_substitute(map_uid)
-                cfg[i] = l
-            # copy only once update has been successfully completed
-            # (no shutil.copyfile as it voids the lock on f)
-            f.seek(0)
-            f.writelines(cfg)
-            f.truncate()
-        else:
-            with cfg_update(f) as cfg:
-                # update uid
-                cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
-                # template refs
-                if map_uid:
-                    for p, leaf in dpath.search(cfg, "**", yielded=True):
-                        if isinstance(leaf, str) and old_uid in leaf:
-                            dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
+    missing = KeyError(f"Simulation {old_uid} not in config {f.name}")
+    # >1e3 times faster on O(1e3) lines
+    if rc["configs"].getboolean("unsafe_update"):
+        old_key = re.compile(rf"^{re.escape(old_uid)}(?=:[^\w])")
+        # tempfile.SpooledTemporaryFile for large configs? no point
+        # because must still fit in memory when loaded as yaml
+        cfg = f.readlines()
+        found = 0
+        for i, l in enumerate(cfg):
+            # update uid
+            l, n = old_key.subn(new_uid, l, 1)
+            found += n
+            # template refs
+            if map_uid:
+                l = Template(l).safe_substitute(map_uid)
+            cfg[i] = l
+        if not found:
+            raise missing
+        # copy only once update has been successfully completed
+        # (no shutil.copyfile as it voids the lock on f)
+        f.seek(0)
+        f.writelines(cfg)
+        f.truncate()
+    else:
+        with cfg_update(f) as cfg:
+            if old_uid not in cfg:
+                raise missing  # before cfg_update dumps
+            # update uid
+            cfg.insert(list(cfg).index(old_uid), new_uid, cfg.pop(old_uid))
+            # template refs
+            if map_uid:
+                for p, leaf in dpath.search(cfg, "**", yielded=True):
+                    if isinstance(leaf, str) and old_uid in leaf:
+                        dpath.set(cfg, p, Template(leaf).safe_substitute(map_uid))
 
 
 def cfg_sort(glob, keys):

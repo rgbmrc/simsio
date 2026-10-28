@@ -77,7 +77,7 @@ def append_measures(measures, results, target=None):
 
 
 @contextmanager
-def run_sim(sim_class=None, not_found_ok=True, **sim_kwargs):
+def run_sim(sim_class=None, **sim_kwargs):
     delim = sys.argv.index(ARG_DELIM) if ARG_DELIM in sys.argv else len(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument("uid", type=str, help="unique identifier of the simulation")
@@ -99,18 +99,12 @@ def run_sim(sim_class=None, not_found_ok=True, **sim_kwargs):
     elif isinstance(sim_class, str):
         sim_class = get_module_attr(sim_class)
     # sim_kwargs.setdefault("readonly", False)  # NOTE should we allow readonly from_config?
-    try:
-        if args.group is None:  # e.g. par generated on another machine
-            sim = sim_class(args.uid, readonly=False)
-            logger.info("Running from the stored par, no config")
-        else:
-            sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
-    # TODO: custom exception, missing config file or uid?
-    except (KeyError, ValueError, FileNotFoundError) as e:
-        if not_found_ok:
-            logger.error(e.args[0])
-            sys.exit()
-        raise
+    # a uid not found, or claimed by a concurrent run, raises: nonzero exit
+    if args.group is None:  # e.g. par generated on another machine
+        sim = sim_class(args.uid, readonly=False)
+        logger.info("Running from the stored par, no config")
+    else:
+        sim = sim_class.from_config(args.uid, args.group, **sim_kwargs)
     sim.ini_args = args
     sim.save_extras = args.save_extras
     sim.run_args = sys.argv[delim + 1 :]
