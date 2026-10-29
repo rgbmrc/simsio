@@ -296,7 +296,9 @@ class AxesGrid(axg.ImageGrid):
                 on = (
                     at_edge[n] if mode == "L" else all(at_edge) if mode == "1" else True
                 )
-                axis.set_tick_params(**{"label" + side: on or not self._share[n]})
+                axis.set_tick_params(
+                    which="both", **{"label" + side: on or not self._share[n]}
+                )
                 axis.label.set_visible(at_edge[n] if mode == "L" else on)
 
     def needs_pad_fit(self):
