@@ -112,7 +112,7 @@ before each entry so that all $4$ start it together. Script:
 | after, `unsafe_update = false` | $30$ | $0$ | $0$ | `KeyError` |
 
 Also checked after the fix:
-- `$name` refs resolve through `jobs/cluster.py params`;
+- `$name` refs resolve through `slurm/cluster.py params` (umps-tests);
 - a rerun of a UUID entry with `-g` renames to `~R` and back;
 - a missing name and a UUID without a par both exit with code $1$;
 - readonly loads of all `statics/**` sims are unchanged.
