@@ -70,7 +70,8 @@ not "simplify" them away:
   (e.g. one slurm array task per uid). A writable `Simulation` takes `uid=None` (new)
   or a UUID with a stored par or a `cfg`, and raises before writing anything otherwise.
 - **Union, never prune.** A re-run adds to the record; missing files are warned about
-  once at open. Nothing is deleted implicitly (`unlink` is the explicit way).
+  once at open (at INFO on readonly opens, where only access fails). Nothing is
+  deleted implicitly (`unlink` is the explicit way).
 
 Every simulation, readonly included, needs a `meta` handler in the rc (`settings.check_rc`). There is no migration for simulations written before `meta` existed: rerun them.
 

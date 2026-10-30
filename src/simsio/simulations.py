@@ -283,7 +283,9 @@ class Simulation(Cache):
             else:
                 self.handles[key].storage.is_file() or missing.append(key)
         if missing:
-            logger.warning("Registered assets with no file: %s", ", ".join(missing))
+            # only a writable sim can act on it; a reader fails on access anyway
+            level = logging.INFO if self.readonly else logging.WARNING
+            logger.log(level, "Registered assets with no file: %s", ", ".join(missing))
 
     @property
     def assets(self):
